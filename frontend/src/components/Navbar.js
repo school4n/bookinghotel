@@ -228,14 +228,12 @@ function Navbar() {
                     <li><NavLink to="/rooms" label="Khách sạn & Chỗ nghỉ" /></li>
                     <li><NavLink to="/bookings" label="Lịch sử đặt phòng" /></li>
                     <li><NavLink to="/about" label="Giới thiệu" /></li>
+                    <li><NavLink to="/welcome" label="Cảm Dứng Du Lịch" /></li>
                 </ul>
 
                 <ul style={styles.navLinksRight}>
                     <li style={{display: isMobile ? 'none' : 'block'}}>
-                        <a href="#" style={{...styles.linkItem, fontSize: '14px'}}>Ứng dụng</a>
-                    </li>
-                    <li style={{display: isMobile ? 'none' : 'block'}}>
-                        <a href="#" style={{...styles.linkItem, fontSize: '14px'}}>Hỗ trợ</a>
+                        <a href="/support" style={{...styles.linkItem, fontSize: '14px'}}>Hỗ trợ</a>
                     </li>
 
                     {user ? (

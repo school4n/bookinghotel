@@ -13,6 +13,9 @@ import Cart from './pages/Cart';
 import UserBookings from './pages/UserBookings';
 import AboutHistory from './pages/AboutHistory';
 import Testimonial from './pages/Testimonial';
+import MagazinePage from './pages/MagazinePage.js';
+import HotelSupport from './pages/HotelSupport.js';
+import PaymentResult from './pages/PaymentResult';
 
 // --- ADMIN COMPONENTS ---
 import AdminLogin from './admin/AdminLogin';
@@ -86,6 +89,9 @@ function App() {
             <Route path="/cart" element={<Cart />} />
             <Route path="/bookings" element={<UserBookings />} />
             <Route path="/about" element={<AboutHistory />} />
+            <Route path="/welcome" element={<MagazinePage />} />
+            <Route path="/support" element={<HotelSupport />} />
+            <Route path="/payment-result" element={<PaymentResult />} />
         </Route>
 
         {/* ============ ADMIN ROUTES ============ */}

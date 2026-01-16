@@ -1,159 +1,164 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-// import axios from 'axios'; // Đã thay thế bằng axiosClient
 import axiosClient from "../api/config"; 
 import { 
     FaHistory, FaCalendarAlt, FaClock, FaUser, FaTrashAlt, 
-    FaMoneyBillWave, FaIdCard, FaBed, FaInfoCircle 
+    FaMoneyBillWave, FaIdCard, FaBed, FaInfoCircle, FaChevronRight 
 } from 'react-icons/fa'; 
 
-// 🎨 THEME COLORS
-const ROYAL_COLOR = "#d4af37"; 
-const DARK_BG = "#1a1a1a"; 
-const LIGHT_BG = "#f3f4f6"; 
-const TEXT_COLOR = "#4b5563"; 
-const DANGER_COLOR = "#ef4444";
+// 🎨 MODERN LUXURY PALETTE
+const COLORS = {
+    primary: "#1e293b",    // Slate 800
+    accent: "#c5a059",     // Muted Gold
+    danger: "#be123c",     // Rose 700
+    success: "#059669",    // Emerald 600
+    info: "#0369a1",       // Blue 700
+    warning: "#d97706",    // Amber 600
+    bg: "#f8fafc",         // Slate 50
+    white: "#ffffff",
+    border: "#e2e8f0",     // Slate 200
+    textMain: "#1e293b",
+    textMuted: "#64748b"
+};
 
 const styles = {
     container: {
         padding: "60px 20px",
         maxWidth: "1000px",
         margin: "0 auto",
-        fontFamily: "'Playfair Display', serif",
-        backgroundColor: LIGHT_BG,
+        fontFamily: "'Inter', system-ui, sans-serif",
+        backgroundColor: COLORS.bg,
         minHeight: '100vh',
     },
     heading: {
-        fontSize: "2.2rem",
-        color: DARK_BG,
-        marginBottom: "40px",
-        fontWeight: "700",
+        fontSize: "2.5rem",
+        color: COLORS.primary,
+        marginBottom: "50px",
+        fontWeight: "850",
         textAlign: 'center',
-        textTransform: 'uppercase',
-        letterSpacing: '1px',
-    },
-    statusText: {
-        fontSize: '1.2rem',
-        color: TEXT_COLOR,
-        padding: '50px',
-        textAlign: 'center',
+        letterSpacing: '-0.05em',
     },
     card: {
-        backgroundColor: '#fff',
-        borderRadius: '12px',
-        boxShadow: "0 10px 25px rgba(0,0,0,0.05)",
-        marginBottom: '30px',
-        border: '1px solid #e5e7eb',
+        backgroundColor: COLORS.white,
+        borderRadius: '24px',
+        boxShadow: "0 10px 15px -3px rgba(0,0,0,0.04), 0 4px 6px -2px rgba(0,0,0,0.02)",
+        marginBottom: '40px',
+        border: `1px solid ${COLORS.border}`,
         overflow: 'hidden',
-        transition: 'transform 0.2s ease',
+        transition: 'all 0.3s ease',
     },
     cardHeader: {
-        backgroundColor: DARK_BG,
-        padding: '15px 25px',
+        padding: '20px 30px',
+        borderBottom: `1px solid ${COLORS.border}`,
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center',
-        color: ROYAL_COLOR,
+        background: '#fff',
     },
     bookingId: {
-        fontSize: '1.1rem',
-        fontWeight: 'bold',
+        fontSize: '1rem',
+        fontWeight: '800',
+        color: COLORS.primary,
         display: 'flex',
         alignItems: 'center',
-        gap: '10px',
+        gap: '12px',
     },
-    bookingDate: {
-        fontSize: '0.9rem',
-        color: '#9ca3af',
-        display: 'flex',
-        alignItems: 'center',
-        gap: '5px'
+    statusBadge: {
+        padding: '6px 14px',
+        borderRadius: '100px',
+        fontSize: '0.7rem',
+        fontWeight: '800',
+        textTransform: 'uppercase',
+        letterSpacing: '0.05em',
+        border: '1px solid rgba(0,0,0,0.05)'
     },
     cardBody: {
-        padding: '25px',
+        padding: '30px',
         display: 'grid',
-        gridTemplateColumns: window.innerWidth < 768 ? '1fr' : '1.5fr 1fr',
-        gap: '30px',
-    },
-    roomList: {
-        borderRight: window.innerWidth < 768 ? 'none' : '1px dashed #e5e7eb',
-        paddingRight: '20px',
+        gridTemplateColumns: window.innerWidth < 992 ? '1fr' : '1.2fr 1fr',
+        gap: '40px',
     },
     sectionTitle: {
-        fontSize: '1rem',
-        fontWeight: 'bold',
-        color: DARK_BG,
-        marginBottom: '15px',
-        borderBottom: `2px solid ${ROYAL_COLOR}`,
-        display: 'inline-block',
-        paddingBottom: '5px',
-    },
-    item: {
-        display: 'flex',
-        gap: '15px',
+        fontSize: '0.85rem',
+        fontWeight: '800',
+        color: COLORS.textMuted,
         marginBottom: '20px',
-        paddingBottom: '20px',
-        borderBottom: '1px solid #f3f4f6',
-    },
-    itemImage: {
-        width: '80px',
-        height: '80px',
-        objectFit: 'cover',
-        borderRadius: '8px',
-        boxShadow: '0 2px 5px rgba(0,0,0,0.1)',
-    },
-    itemInfo: {
-        flex: 1,
-    },
-    roomName: {
-        fontWeight: 'bold',
-        fontSize: '1.1rem',
-        color: '#374151',
-        marginBottom: '5px',
-    },
-    roomMeta: {
-        fontSize: '0.9rem',
-        color: '#6b7280',
-        lineHeight: '1.5',
-    },
-    infoColumn: {
-        display: 'flex',
-        flexDirection: 'column',
-        justifyContent: 'space-between',
-    },
-    infoRow: {
+        textTransform: 'uppercase',
+        letterSpacing: '0.1em',
         display: 'flex',
         alignItems: 'center',
-        gap: '10px',
-        marginBottom: '12px',
-        fontSize: '0.95rem',
-        color: '#4b5563',
+        gap: '8px'
     },
-    totalArea: {
-        marginTop: 'auto',
-        paddingTop: '20px',
-        borderTop: '1px solid #e5e7eb',
+    roomItem: {
+        display: 'flex',
+        gap: '20px',
+        padding: '15px',
+        borderRadius: '16px',
+        backgroundColor: '#fcfcfd',
+        border: '1px solid #f1f5f9',
+    },
+    itemImage: {
+        width: '100px',
+        height: '100px',
+        objectFit: 'cover',
+        borderRadius: '12px',
+    },
+    roomName: {
+        fontWeight: '700',
+        fontSize: '1.1rem',
+        color: COLORS.primary,
+        marginBottom: '4px',
+    },
+    infoGrid: {
+        display: 'grid',
+        gridTemplateColumns: '1fr',
+        gap: '12px',
+    },
+    infoLabel: {
+        display: 'flex',
+        alignItems: 'center',
+        gap: '12px',
+        fontSize: '0.95rem',
+        color: COLORS.textMain,
+        fontWeight: '500'
+    },
+    dateRange: {
+        display: 'flex',
+        alignItems: 'center',
+        gap: '15px',
+        backgroundColor: '#f8fafc',
+        padding: '15px',
+        borderRadius: '12px',
+        marginTop: '10px'
+    },
+    totalSection: {
+        marginTop: '30px',
+        padding: '20px',
+        borderRadius: '16px',
+        background: COLORS.primary,
+        color: '#fff',
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center'
     },
     totalPrice: {
-        fontSize: '1.6rem',
-        fontWeight: 'bold',
-        color: '#d97706',
-        textAlign: 'right',
-        display: 'block',
+        fontSize: '1.5rem',
+        fontWeight: '900',
+        color: COLORS.accent,
     },
     cardFooter: {
-        padding: '15px 25px',
-        backgroundColor: '#f9fafb',
-        borderTop: '1px solid #e5e7eb',
+        padding: '20px 30px',
+        backgroundColor: '#fff',
+        borderTop: `1px solid ${COLORS.border}`,
         display: 'flex',
         justifyContent: 'flex-end',
         gap: '15px',
     },
     btn: {
-        padding: '10px 20px',
-        borderRadius: '6px',
-        fontWeight: '600',
-        fontSize: '0.9rem',
+        padding: '12px 24px',
+        borderRadius: '12px',
+        fontWeight: '700',
+        fontSize: '0.85rem',
         cursor: 'pointer',
         display: 'flex',
         alignItems: 'center',
@@ -162,24 +167,14 @@ const styles = {
         border: 'none',
     },
     btnDetail: {
-        backgroundColor: '#fff',
-        color: DARK_BG,
-        border: '1px solid #d1d5db',
+        backgroundColor: COLORS.bg,
+        color: COLORS.primary,
         textDecoration: 'none',
     },
     btnCancel: {
         backgroundColor: '#fff',
-        color: DANGER_COLOR,
-        border: `1px solid ${DANGER_COLOR}`,
-    },
-    badge: {
-        padding: '4px 10px',
-        borderRadius: '20px',
-        fontSize: '0.75rem',
-        fontWeight: 'bold',
-        backgroundColor: '#10b981',
-        color: 'white',
-        marginLeft: '10px',
+        color: COLORS.danger,
+        border: `1px solid #fecdd3`,
     }
 };
 
@@ -187,158 +182,165 @@ function UserBookings() {
     const navigate = useNavigate();
     const [bookings, setBookings] = useState([]);
     const [loading, setLoading] = useState(true);
-    const [error, setError] = useState(null);
     const [isCancelling, setIsCancelling] = useState(false);
-
     const token = localStorage.getItem('token');
 
-    const handleAuthError = useCallback((message = "Phiên đăng nhập hết hạn.") => {
-        localStorage.clear();
-        window.dispatchEvent(new Event('auth-change')); 
-        alert(message);
-        navigate('/login');
-    }, [navigate]);
+    // 🛠️ HÀM PHÂN LOẠI TRẠNG THÁI
+    const getStatusLabel = (status) => {
+        switch (status) {
+            case 'checked_in':
+                return { text: "Đang lưu trú", color: COLORS.info, bg: "#f0f9ff" };
+            case 'confirmed':
+                return { text: "Đã xác nhận", color: COLORS.success, bg: "#ecfdf5" };
+            case 'pending':
+                return { text: "Chờ xử lý", color: COLORS.warning, bg: "#fffbeb" };
+            default:
+                return { text: status, color: COLORS.textMuted, bg: COLORS.bg };
+        }
+    };
 
-    // 1. Hàm lấy danh sách đơn đặt - SỬ DỤNG axiosClient
     const fetchBookings = useCallback(async () => {
         setLoading(true);
-        if (!token) {
-            setLoading(false);
-            return handleAuthError("Vui lòng đăng nhập để xem lịch sử.");
-        }
+        if (!token) return navigate('/login');
         try {
-            // Chỉ cần gọi endpoint '/bookings'
             const res = await axiosClient.get("/bookings");
             setBookings(res.data); 
         } catch (err) {
-            if (err.response?.status === 401) handleAuthError();
-            else setError("Lỗi tải dữ liệu: " + (err.response?.data?.message || err.message));
+            console.error(err);
         } finally {
             setLoading(false);
         }
-    }, [token, handleAuthError]); 
+    }, [token, navigate]); 
 
     useEffect(() => { fetchBookings(); }, [fetchBookings]);
 
-    const calculateTotal = (items) => {
-        if (!items || !Array.isArray(items)) return 0;
-        return items.reduce((acc, item) => acc + (item.unit_price || 0) * (item.quantity || 0), 0);
-    };
-    
-    // 2. Hàm hủy đơn đặt - SỬ DỤNG axiosClient
     const handleCancelBooking = async (bookingId) => {
-        if (!window.confirm(`Bạn có chắc chắn muốn hủy đơn #${bookingId}? Hành động này không thể hoàn tác.`)) return;
+        if (!window.confirm(`Bạn có chắc chắn muốn hủy đơn đặt phòng #${bookingId}?`)) return;
         setIsCancelling(true);
         try {
-            // Gọi endpoint DELETE '/bookings/:id'
             await axiosClient.delete(`/bookings/${bookingId}`);
-            alert(`Đã hủy thành công đơn hàng #${bookingId}`);
-            fetchBookings(); // Reload lại danh sách
+            fetchBookings();
         } catch (err) {
-            alert(`Hủy thất bại: ${err.response?.data?.message || "Lỗi kết nối"}`);
+            alert("Không thể hủy đơn này. Vui lòng liên hệ lễ tân.");
         } finally {
             setIsCancelling(false);
         }
     };
 
-    if (loading) return <div style={styles.container}><p style={styles.statusText}>⏳ Đang tải dữ liệu...</p></div>;
-    if (error) return <div style={styles.container}><p style={{...styles.statusText, color: DANGER_COLOR}}>{error}</p></div>;
-    if (bookings.length === 0) return (
-        <div style={styles.container}>
-            <h2 style={styles.heading}><FaHistory style={{marginRight: '10px'}}/> LỊCH SỬ ĐẶT PHÒNG</h2>
-            <p style={styles.statusText}>Bạn chưa có đơn đặt phòng nào.</p>
-        </div>
-    );
+    if (loading) return <div style={styles.container}><p style={{textAlign:'center'}}>Đang tải lịch sử...</p></div>;
+
+    // ✅ BƯỚC QUAN TRỌNG: Lọc bỏ các đơn 'cancelled' trước khi hiển thị
+    const activeBookings = bookings.filter(b => b.order_status !== 'cancelled');
 
     return (
         <div style={styles.container}>
-            <h2 style={styles.heading}><FaHistory style={{marginRight: '10px'}}/> LỊCH SỬ ĐẶT PHÒNG</h2>
+            <h2 style={styles.heading}>Lịch Sử Đặt Phòng</h2>
             
-            {bookings.map((booking) => (
-                <div key={booking.booking_id} style={styles.card}>
-                    
-                    <div style={styles.cardHeader}>
-                        <div style={styles.bookingId}>
-                            #{booking.booking_id}
-                            <span style={styles.badge}>ĐÃ XÁC NHẬN</span>
-                        </div>
-                        <div style={styles.bookingDate}>
-                            <FaClock /> {new Date(booking.created_at).toLocaleString('vi-VN')}
-                        </div>
-                    </div>
+            {activeBookings.length === 0 ? (
+                <div style={{textAlign: 'center', padding: '100px 0'}}>
+                    <FaHistory size={50} color={COLORS.border} style={{marginBottom: '20px'}}/>
+                    <p style={{color: COLORS.textMuted, fontSize: '1.1rem'}}>Bạn không có đơn đặt phòng nào đang hoạt động.</p>
+                    <Link to="/" style={{color: COLORS.accent, textDecoration: 'none', fontWeight: 'bold'}}>Khám phá phòng ngay</Link>
+                </div>
+            ) : (
+                activeBookings.map((booking) => {
+                    const status = getStatusLabel(booking.order_status);
+                    return (
+                        <div key={booking.booking_id} style={styles.card}>
+                            {/* Header: ID & Status */}
+                            <div style={styles.cardHeader}>
+                                <div style={styles.bookingId}>
+                                    <span style={{color: COLORS.accent}}>●</span> ĐƠN HÀNG #{booking.booking_id}
+                                    <span style={{
+                                        ...styles.statusBadge, 
+                                        color: status.color, 
+                                        backgroundColor: status.bg 
+                                    }}>
+                                        {status.text}
+                                    </span>
+                                </div>
+                                <div style={{fontSize: '0.85rem', color: COLORS.textMuted, fontWeight: '600'}}>
+                                    Ngày đặt: {new Date(booking.created_at).toLocaleDateString('vi-VN')}
+                                </div>
+                            </div>
 
-                    <div style={styles.cardBody}>
-                        <div style={styles.roomList}>
-                            <div style={styles.sectionTitle}><FaBed style={{marginRight:5}}/> Danh Sách Phòng</div>
-                            {booking.items?.map(item => (
-                                <div key={item.id} style={styles.item}>
-                                    <img 
-                                        src={item.image ? `/images/${item.image}` : `https://via.placeholder.com/80`} 
-                                        alt="Room" style={styles.itemImage} 
-                                    />
-                                    <div style={styles.itemInfo}>
-                                        <div style={styles.roomName}>{item.room_name}</div>
-                                        <div style={styles.roomMeta}>
-                                            Diện tích: {item.area ? `${item.area}m²` : 'N/A'} <br/>
-                                            Sức chứa: {item.max_guests} người
-                                        </div>
+                            <div style={styles.cardBody}>
+                                {/* Left Column: Room Info */}
+                                <div>
+                                    <div style={styles.sectionTitle}><FaBed size={14}/> Thông tin phòng nghỉ</div>
+                                    <div style={{display: 'grid', gap: '15px'}}>
+                                        {booking.items?.map(item => (
+                                            <div key={item.id} style={styles.roomItem}>
+                                                <img 
+                                                    src={item.image ? `/images/${item.image}` : `https://via.placeholder.com/100`} 
+                                                    alt="Room" style={styles.itemImage} 
+                                                />
+                                                <div>
+                                                    <div style={styles.roomName}>{item.room_name}</div>
+                                                    <div style={{fontSize: '0.85rem', color: COLORS.textMuted}}>
+                                                        Phòng tiêu chuẩn · {item.max_guests} Khách tối đa
+                                                    </div>
+                                                    <div style={{marginTop: '10px', fontWeight: '700', color: COLORS.primary}}>
+                                                        {item.unit_price?.toLocaleString()} VNĐ / Đêm
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ))}
                                     </div>
                                 </div>
-                            ))}
-                        </div>
 
-                        <div style={styles.infoColumn}>
-                            <div>
-                                <div style={styles.sectionTitle}><FaUser style={{marginRight:5}}/> Thông Tin Khách</div>
-                                <div style={styles.infoRow}><FaUser color="#9ca3af"/> {booking.client_name}</div>
-                                <div style={styles.infoRow}><FaIdCard color="#9ca3af"/> {booking.cccd}</div>
-                                <div style={styles.infoRow}>
-                                    <FaMoneyBillWave color="#9ca3af"/> 
-                                    {booking.payment_method === 'cash' ? 'Tiền mặt tại quầy' : 'Chuyển khoản ngân hàng'}
-                                </div>
-                                
-                                <div style={{marginTop: '20px'}}></div>
-                                <div style={styles.sectionTitle}><FaCalendarAlt style={{marginRight:5}}/> Thời Gian</div>
-                                <div style={styles.infoRow}>
-                                    Từ: <strong>{new Date(booking.check_in_date).toLocaleDateString('vi-VN')}</strong>
-                                </div>
-                                <div style={styles.infoRow}>
-                                    Đến: <strong>{new Date(booking.check_out_date).toLocaleDateString('vi-VN')}</strong>
+                                {/* Right Column: Customer & Time */}
+                                <div style={{display: 'flex', flexDirection: 'column'}}>
+                                    <div style={styles.sectionTitle}><FaUser size={14}/> Chi tiết lưu trú</div>
+                                    <div style={styles.infoGrid}>
+                                        <div style={styles.infoLabel}><FaUser size={14} color={COLORS.accent}/> {booking.client_name}</div>
+                                        <div style={styles.infoLabel}><FaIdCard size={14} color={COLORS.accent}/> CCCD: {booking.cccd}</div>
+                                        <div style={styles.infoLabel}>
+                                            <FaMoneyBillWave size={14} color={COLORS.accent}/> 
+                                            PTTT: {booking.payment_method === 'cash' ? 'Thanh toán tại khách sạn' : 'Đã thanh toán Online'}
+                                        </div>
+                                    </div>
+
+                                    <div style={{marginTop: '30px'}}>
+                                        <div style={styles.sectionTitle}><FaCalendarAlt size={14}/> Thời gian nhận/trả</div>
+                                        <div style={styles.dateRange}>
+                                            <div>
+                                                <div style={{fontSize: '0.7rem', color: COLORS.textMuted, fontWeight: '700'}}>CHECK-IN</div>
+                                                <div style={{fontWeight: '800', fontSize: '1rem'}}>{new Date(booking.check_in_date).toLocaleDateString('vi-VN')}</div>
+                                            </div>
+                                            <FaChevronRight size={12} color={COLORS.border}/>
+                                            <div>
+                                                <div style={{fontSize: '0.7rem', color: COLORS.textMuted, fontWeight: '700'}}>CHECK-OUT</div>
+                                                <div style={{fontWeight: '800', fontSize: '1rem'}}>{new Date(booking.check_out_date).toLocaleDateString('vi-VN')}</div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div style={styles.totalSection}>
+                                        <span style={{fontSize:'0.75rem', fontWeight:'800'}}>TỔNG TIỀN PHẢI TRẢ</span>
+                                        <span style={styles.totalPrice}>
+                                            {booking.total_price?.toLocaleString('vi-VN')} VNĐ
+                                        </span>
+                                    </div>
                                 </div>
                             </div>
 
-                            <div style={styles.totalArea}>
-                                <span style={{fontSize:'0.9rem', color:'#666'}}>TỔNG THANH TOÁN</span>
-                                <span style={styles.totalPrice}>
-                                    {(booking.total_price || calculateTotal(booking.items)).toLocaleString('vi-VN')} VNĐ
-                                </span>
+                            <div style={styles.cardFooter}>
+                                {/* ✅ Chỉ cho phép hủy nếu chưa nhận phòng (Status khác checked_in) */}
+                                {booking.order_status !== 'checked_in' && (
+                                    <button
+                                        onClick={() => handleCancelBooking(booking.booking_id)}
+                                        style={{...styles.btn, ...styles.btnCancel}}
+                                        disabled={isCancelling}
+                                    >
+                                        <FaTrashAlt size={12}/> Hủy đặt phòng
+                                    </button>
+                                )}
                             </div>
                         </div>
-                    </div>
-
-                    <div style={styles.cardFooter}>
-                        <button
-                            onClick={() => handleCancelBooking(booking.booking_id)}
-                            style={{...styles.btn, ...styles.btnCancel}}
-                            disabled={isCancelling}
-                            onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#fef2f2'}
-                            onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#fff'}
-                        >
-                            <FaTrashAlt /> Hủy Đơn
-                        </button>
-
-                        <Link
-                            to={`/booking_detail/${booking.booking_id}`}
-                            style={{...styles.btn, ...styles.btnDetail}}
-                            onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#f3f4f6'}
-                            onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#fff'}
-                        >
-                            <FaInfoCircle /> Xem Chi Tiết
-                        </Link>
-                    </div>
-
-                </div>
-            ))}
+                    );
+                })
+            )}
         </div>
     );
 }

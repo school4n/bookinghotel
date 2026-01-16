@@ -144,7 +144,7 @@ function HotelDetail() {
             const res = await axiosClient.post(`/cart`, 
                 { room_id: Number(id), quantity: 1 }
             );
-            alert(res.data.message || "Đã thêm phòng vào đơn đặt hàng chờ.");
+            // alert(res.data.message || "Đã thêm phòng vào đơn đặt hàng chờ.");
             navigate('/cart'); 
         } catch (err) {
             alert(`Đặt phòng thất bại: ${err.response?.data?.message || "Lỗi kết nối."}`);
@@ -359,9 +359,17 @@ function HotelDetail() {
                         </div>
                         <div style={{color: ROYAL_COLOR, fontWeight: 'bold'}}><FaStar size={20} /> <FaStar size={20} /> <FaStar size={20} /></div>
                     </div>
-                    <div style={styles.mapBox}>
-                        <iframe src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m12!1m3!1d3919.4243118429486!2d106.7020815!3d10.7766524!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x31752f470559f0f9%3A0x6b3b55a01940989c!2zS2jDoWNoIHPhuqFuIFNoZXJhdG9uIFNhaWdvbiBIb3RlbCAmIFRvd2Vycw!5e0!3m2!1svi!2s!4v1700000000000!5m2!1svi!2s" width="100%" height="100%" style={{ border: 0 }} allowFullScreen="" loading="lazy" referrerPolicy="no-referrer-when-downgrade" title="Hotel Location"></iframe>
-                    </div>
+                   <div style={styles.mapBox}>
+    <iframe 
+        src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3919.424167419927!2d106.699419!3d10.77877!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x31752f385570472f%3A0x17b56d9d00103c!2zUXXhuq1uIDEsIFRow6BuaCBwaOG7kSBI4buTIENow60gTWluaA!5e0!3m2!1svi!2svn!4v1700000000000!5m2!1svi!2svn" 
+        width="100%" 
+        height="100%" 
+        style={{ border: 0 }} // ✅ Sửa từ string sang object
+        allowFullScreen={true} // ✅ Sửa thành camelCase
+        loading="lazy" 
+        referrerPolicy="no-referrer-when-downgrade" // ✅ Sửa thành camelCase
+    ></iframe>
+</div>
                 </div>
             </div>
         </>

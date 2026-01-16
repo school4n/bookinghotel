@@ -30,7 +30,7 @@ function AdminUserManagement() {
     const fetchUsers = useCallback(async () => {
         try {
             setLoading(true);
-            // SỬ DỤNG axiosClient: Chỉ cần truyền path '/admin/users'
+            
             const response = await axiosClient.get('/admin/users');
             setUsers(Array.isArray(response.data) ? response.data : response.data.users || []);
             setError(null);

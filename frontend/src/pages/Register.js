@@ -1,14 +1,14 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
-// import axios from "axios"; // Đã thay thế bằng axiosClient
 import axiosClient from "../api/config"; 
+import emailjs from '@emailjs/browser'; 
 
-// 🎨 CÁC ĐỊNH NGHĨA STYLE (Giữ nguyên)
-const ROYAL_COLOR = "#f3c300";
-const DARK_BG = "#0f172a";
+// 🎨 CẬP NHẬT ĐỊNH NGHĨA STYLE MÀU XANH
+const ROYAL_COLOR = "#f3c300"; // Màu vàng nhấn
+const DARK_BLUE_BG = "#2b50d8"; // Màu xanh dương chủ đạo (khớp với ảnh bạn gửi)
 const LIGHT_BG = "#f0f2f5"; 
-const INPUT_BG = "#1e293b";
-const TEXT_COLOR = "#ccc";
+const INPUT_LIGHT_BG = "#e8f0fe"; // Màu nền input xanh nhạt khi focus
+const TEXT_WHITE = "#ffffff";
 
 const styles = {
     pageContainer: {
@@ -17,59 +17,74 @@ const styles = {
         alignItems: 'center',
         minHeight: '100vh',
         backgroundColor: LIGHT_BG,
-        fontFamily: "serif",
+        fontFamily: "'Inter', serif",
     },
     formContainer: {
         width: '100%',
         maxWidth: '450px',
         padding: '40px',
-        backgroundColor: DARK_BG,
-        borderRadius: '8px',
-        boxShadow: '0 10px 30px rgba(0,0,0,0.3)',
+        backgroundColor: DARK_BLUE_BG, // 🔵 Thay đổi từ DARK_BG sang xanh dương
+        borderRadius: '12px',
+        boxShadow: '0 10px 30px rgba(0,0,0,0.2)',
         textAlign: 'center',
     },
     heading: {
         color: ROYAL_COLOR,
         marginBottom: '25px',
-        fontSize: '2rem',
+        fontSize: '1.8rem',
         fontWeight: 'bold',
         textTransform: 'uppercase',
+        letterSpacing: '1px'
     },
     formGroup: {
-        marginBottom: '20px',
+        marginBottom: '18px',
         textAlign: 'left',
+    },
+    label: {
+        color: TEXT_WHITE, // ⚪ Chuyển nhãn sang màu trắng để nổi bật trên nền xanh
+        display: 'block',
+        marginBottom: '8px',
+        fontSize: '0.85rem',
+        fontWeight: '600'
     },
     inputStyle: {
         width: '100%',
-        padding: '12px',
-        borderRadius: '4px',
-        border: '1px solid #333',
-        backgroundColor: INPUT_BG,
-        color: TEXT_COLOR,
+        padding: '12px 15px',
+        borderRadius: '8px',
+        border: 'none', // Bỏ viền để trông hiện đại hơn
+        backgroundColor: "rgba(255, 255, 255, 0.9)", // ⚪ Nền trắng mờ cho input
+        color: "#333", // Chữ trong input màu tối để dễ đọc
         fontSize: '1rem',
         boxSizing: 'border-box',
+        outline: 'none',
     },
     buttonStyle: {
         width: '100%',
-        padding: '12px 20px',
+        padding: '14px',
         backgroundColor: ROYAL_COLOR,
-        color: DARK_BG,
+        color: "#000",
         border: 'none',
-        borderRadius: '4px',
-        fontWeight: 'bold',
+        borderRadius: '8px',
+        fontWeight: '800',
         cursor: 'pointer',
-        fontSize: '1.1rem',
-        marginTop: '10px',
-        transition: 'background-color 0.3s ease',
+        fontSize: '1rem',
+        marginTop: '15px',
+        marginLeft: '0px',
+        marginRight: '0px',
+        marginBottom: '0px',
+        transition: 'all 0.3s ease',
+        boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
     },
     linkText: {
-        marginTop: '20px',
-        color: TEXT_COLOR,
+        marginTop: '25px',
+        color: TEXT_WHITE, // ⚪ Link màu trắng
+        fontSize: '0.9rem'
     },
     errorText: {
-        color: '#e8491d', 
+        color: '#ffdad6', // Màu đỏ nhạt để dễ đọc trên nền xanh
         marginTop: '15px',
-    },
+        fontSize: '0.9rem'
+    }
 };
 
 function Register() {
@@ -81,15 +96,37 @@ function Register() {
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
 
-    // 💡 Endpoint ngắn gọn
-    const REGISTER_ENDPOINT = "/auth/register";
+    // ✅ Khởi tạo EmailJS với Public Key của bạn
+    useEffect(() => {
+        emailjs.init("seajRlYP6YCpKbOZQ");
+    }, []);
+
+    const sendWelcomeEmail = (targetEmail, targetName) => {
+        // ✅ Cấu trúc data gửi đi khớp 100% với {{name}} và {{email}} trong Template của bạn
+        const templateParams = {
+            name: targetName,  
+            email: targetEmail 
+        };
+
+        emailjs.send(
+            'service_iyu6lx9', 
+            'template_vx7buky', // ✅ Đã cập nhật Template ID mới từ ảnh của bạn
+            templateParams
+        )
+        .then((res) => {
+            console.log("SUCCESS! Email chào mừng đã gửi.", res.status, res.text);
+        })
+        .catch((err) => {
+            console.error("FAILED... Lỗi gửi email:", err);
+        });
+    };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
         setError('');
 
         if (!username || !password || !email) {
-            setError("Vui lòng nhập đầy đủ Tên đăng nhập, Email và Mật khẩu.");
+            setError("Vui lòng nhập đầy đủ thông tin.");
             return;
         }
 
@@ -101,18 +138,19 @@ function Register() {
         setLoading(true);
 
         try {
-            // Sử dụng axiosClient
-            const response = await axiosClient.post(REGISTER_ENDPOINT, { username, password, email });
+            // 1. Gửi yêu cầu đăng ký lên Server Backend
+            const response = await axiosClient.post("/auth/register", { username, password, email });
 
-            // 💾 Lưu thông tin xác thực vào Local Storage
+            // 2. Lưu thông tin xác thực
             localStorage.setItem('token', response.data.token);
             localStorage.setItem('userId', response.data.userId);
             localStorage.setItem('username', response.data.username);
 
-            // 📢 Kích hoạt sự kiện để đồng bộ trạng thái đăng nhập toàn trang
+            // 3. Kích hoạt gửi email tự động
+            sendWelcomeEmail(email, username);
+
             window.dispatchEvent(new Event('auth-change'));
-            
-            alert("Đăng ký thành công! Bạn đã được đăng nhập.");
+            alert("Đăng ký thành công! Hãy kiểm tra hòm thư chào mừng của bạn.");
             navigate('/'); 
 
         } catch (err) {
@@ -126,66 +164,54 @@ function Register() {
     return (
         <div style={styles.pageContainer}>
             <div style={styles.formContainer}>
-                <h2 style={styles.heading}>ĐĂNG KÝ TÀI KHOẢN MỚI</h2>
+                <h2 style={styles.heading}>Đăng Ký Thành Viên</h2>
                 
                 <form onSubmit={handleSubmit}>
                     <div style={styles.formGroup}>
-                        <label style={{ color: TEXT_COLOR, display: 'block', marginBottom: '5px' }}>
-                            Tên đăng nhập
-                        </label>
+                        <label style={styles.label}>Tên đăng nhập</label>
                         <input
                             type="text"
                             value={username}
                             onChange={(e) => setUsername(e.target.value)}
-                            placeholder="Tên đăng nhập (Username)"
+                            placeholder="Username"
                             style={styles.inputStyle}
                             required
-                            disabled={loading}
                         />
                     </div>
                     
                     <div style={styles.formGroup}>
-                        <label style={{ color: TEXT_COLOR, display: 'block', marginBottom: '5px' }}>
-                            Email
-                        </label>
+                        <label style={styles.label}>Địa chỉ Email</label>
                         <input
                             type="email"
                             value={email}
                             onChange={(e) => setEmail(e.target.value)}
-                            placeholder="Địa chỉ Email"
+                            placeholder="example@gmail.com"
                             style={styles.inputStyle}
                             required
-                            disabled={loading}
                         />
                     </div>
 
                     <div style={styles.formGroup}>
-                        <label style={{ color: TEXT_COLOR, display: 'block', marginBottom: '5px' }}>
-                            Mật khẩu
-                        </label>
+                        <label style={styles.label}>Mật khẩu</label>
                         <input
                             type="password"
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
-                            placeholder="Nhập mật khẩu"
+                            placeholder="••••••••"
                             style={styles.inputStyle}
                             required
-                            disabled={loading}
                         />
                     </div>
                     
                     <div style={styles.formGroup}>
-                        <label style={{ color: TEXT_COLOR, display: 'block', marginBottom: '5px' }}>
-                            Xác nhận mật khẩu
-                        </label>
+                        <label style={styles.label}>Xác nhận mật khẩu</label>
                         <input
                             type="password"
                             value={confirmPassword}
                             onChange={(e) => setConfirmPassword(e.target.value)}
-                            placeholder="Nhập lại mật khẩu"
+                            placeholder="••••••••"
                             style={styles.inputStyle}
                             required
-                            disabled={loading}
                         />
                     </div>
                     
@@ -195,17 +221,15 @@ function Register() {
                         type="submit"
                         style={styles.buttonStyle}
                         disabled={loading}
-                        onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#d6ad00'}
-                        onMouseOut={(e) => e.currentTarget.style.backgroundColor = ROYAL_COLOR}
                     >
-                        {loading ? 'Đang xử lý...' : 'ĐĂNG KÝ'}
+                        {loading ? 'Đang xử lý...' : 'ĐĂNG KÝ NGAY'}
                     </button>
                 </form>
 
                 <p style={styles.linkText}>
-                    Đã có tài khoản?{' '}
+                    Bạn đã có tài khoản?{' '}
                     <Link to="/login" style={{ color: ROYAL_COLOR, textDecoration: 'none', fontWeight: 'bold' }}>
-                        Đăng nhập ngay
+                        Đăng nhập
                     </Link>
                 </p>
             </div>

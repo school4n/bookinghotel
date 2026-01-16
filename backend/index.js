@@ -4,33 +4,54 @@ const mysql = require("mysql");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 
+const moment = require('moment'); // Để định dạng ngày giờ chuẩn VNPAY
+const qs = require('qs');         // Để sắp xếp tham số URL
+const crypto = require('crypto'); // Để tạo mã bảo mật (hash)
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
 // ==========================
-// Cấu hình CSDL
+// Cấu hình CSDL TiDB Cloud
 // ==========================
-const db = mysql.createConnection({
-    host: process.env.DB_HOST || 'khachsan-jamisan999.l.aivencloud.com',
-    port: process.env.DB_PORT || 22832,
-    user: process.env.DB_USER || 'avnadmin',
-    password: process.env.DB_PASS, // Mật khẩu sẽ cài đặt trên Render để bảo mật
-    database: process.env.DB_NAME || 'defaultdb',
-    ssl: {
-        rejectUnauthorized: false
-    }
-});
+// const db = mysql.createConnection({
+//     host: process.env.DB_HOST || 'gateway01.ap-southeast-1.prod.aws.tidbcloud.com', // Lấy từ HOST
+//     port: process.env.DB_PORT || 4000,                                             // Lấy từ PORT
+//     user: process.env.DB_USER || '3qhZS3hkjF2gDVy.root',                           // Lấy từ USERNAME
+//     password: process.env.DB_PASS || 'ZVPPWHnjwITbQw1P',                      // Mật khẩu khi nhấn Generate
+//     database: process.env.DB_NAME || 'khachsan',                                   // Lấy từ DATABASE
+//     ssl: {
+//         minVersion: 'TLSv1.2',
+//         rejectUnauthorized: true // TiDB Cloud yêu cầu SSL an toàn
+//     }
+// });
+// db.connect((err) => {
+//     if (err) {
+//         console.error('Lỗi kết nối TiDB Cloud:', err);
+//         return;
+//     }
+//     console.log('Đã kết nối thành công đến TiDB Cloud (khachsan)!');
+// });
 
-// Thêm đoạn này để kiểm tra xem kết nối được không
+
+
+const db = mysql.createConnection({
+    host: "localhost",
+    user: "root",
+    password: "",
+    database: "khachsan",
+});
 db.connect((err) => {
     if (err) {
-        console.error('Lỗi kết nối Database:', err);
-        return;
+        console.error("❌ Lỗi kết nối MySQL:", err);
+        process.exit(1);
     }
-    console.log('Đã kết nối thành công đến Aiven MySQL!');
+    console.log("✅ Kết nối MySQL thành công với cấu trúc CSDL đầy đủ.");
 });
+
+//hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh
+
 
 // ==========================
 // Cấu hình JWT & Middleware Xác thực
@@ -592,88 +613,70 @@ app.delete("/api/admin/rooms/:id", verifyAdminToken, (req, res) => {
 ========================================================== */
 
 // GET /api/cart (Lấy đơn đặt đang chờ - KHÔNG LẤY NGÀY THÁNG)
+// index.js - Tìm đến route app.get("/api/cart", ...)
 app.get("/api/cart", verifyToken, (req, res) => {
     const userId = req.userId;
     const sql = `
         SELECT 
             b.id AS cart_id, b.quantity,
-            r.id AS room_id, r.name, r.main_image_url AS image, r.price_per_night AS price
+            r.id AS room_id, r.name, r.main_image_url AS image, r.price_per_night AS price,
+            ui.email -- 🚨 Lấy email trực tiếp từ database tại đây
         FROM booking_order b
         JOIN rooms r ON b.room_id = r.id
+        LEFT JOIN user_info ui ON b.user_id = ui.user_id 
         WHERE b.user_id = ? AND b.order_status = 'pending'
         ORDER BY b.created_at DESC
     `;
     db.query(sql, [userId], (err, rows) => {
-        if (err) return res.status(500).json({ message: "DB error", error: err });
+        if (err) return res.status(500).json({ message: "Lỗi DB", error: err });
         res.json(rows);
     });
 });
 
 
-// POST /api/cart (Tạo đơn chờ & Đổi trạng thái phòng sang 'booked')
-app.post("/api/cart", verifyToken, (req, res) => {
+// index.js
+// index.js
+app.post("/api/cart", verifyToken, async (req, res) => {
     const userId = req.userId;
     const { room_id, quantity } = req.body;
 
-    if (!room_id || !quantity) return res.status(400).json({ message: "Thiếu room_id hoặc quantity" });
-
-    db.beginTransaction(err => {
-        if (err) return res.status(500).json({ message: "Lỗi khởi tạo giao dịch" });
-
-        // BƯỚC 1: Kiểm tra xem User này có đơn 'pending' cũ nào không?
-        // Nếu có, phải trả phòng đó về trạng thái 'available' trước khi xóa đơn.
-        const sqlFindOld = "SELECT room_id FROM booking_order WHERE user_id = ? AND order_status = 'pending'";
-        db.query(sqlFindOld, [userId], (errFind, oldOrders) => {
-            if (errFind) return db.rollback(() => res.status(500).json({ message: "Lỗi tìm đơn cũ" }));
-
-            const clearOldOrderPromise = new Promise((resolve, reject) => {
-                if (oldOrders.length > 0) {
-                    const oldRoomId = oldOrders[0].room_id;
-                    // 1.1 Trả phòng cũ về 'available'
-                    db.query("UPDATE rooms SET status = 'available' WHERE id = ?", [oldRoomId], (errUpdateOld) => {
-                        if (errUpdateOld) return reject(errUpdateOld);
-                        // 1.2 Xóa đơn cũ
-                        db.query("DELETE FROM booking_order WHERE user_id = ? AND order_status = 'pending'", [userId], (errDel) => {
-                            if (errDel) return reject(errDel);
-                            resolve();
-                        });
-                    });
-                } else {
-                    resolve(); // Không có đơn cũ, đi tiếp
-                }
-            });
-
-            clearOldOrderPromise
-                .then(() => {
-                    // BƯỚC 2: Cập nhật phòng MỚI sang 'booked'
-                    // Điều kiện: Phòng phải đang 'available' mới cho đặt
-                    const sqlBookRoom = "UPDATE rooms SET status = 'booked' WHERE id = ? AND status = 'available'";
-                    db.query(sqlBookRoom, [room_id], (errBook, resultBook) => {
-                        if (errBook) return db.rollback(() => res.status(500).json({ message: "Lỗi cập nhật trạng thái phòng" }));
-                        
-                        // Nếu affectedRows = 0 nghĩa là phòng không 'available' (đã bị đặt hoặc bảo trì)
-                        if (resultBook.affectedRows === 0) {
-                            return db.rollback(() => res.status(400).json({ message: "Phòng này không khả dụng hoặc đã được người khác giữ chỗ." }));
-                        }
-
-                        // BƯỚC 3: Tạo đơn đặt phòng mới
-                        const sqlInsert = `INSERT INTO booking_order (user_id, room_id, quantity, order_status, created_at) VALUES (?, ?, ?, 'pending', NOW())`;
-                        db.query(sqlInsert, [userId, room_id, quantity], (errIns, resultIns) => {
-                            if (errIns) return db.rollback(() => res.status(500).json({ message: "Lỗi tạo đơn mới", error: errIns }));
-
-                            // BƯỚC 4: Commit giao dịch
-                            db.commit((errCommit) => {
-                                if (errCommit) return db.rollback(() => res.status(500).json({ message: "Lỗi commit" }));
-                                res.json({ message: "Đã thêm vào giỏ & giữ chỗ phòng", cartId: resultIns.insertId });
-                            });
-                        });
-                    });
-                })
-                .catch(err => {
-                    db.rollback(() => res.status(500).json({ message: "Lỗi xử lý đơn cũ", error: err }));
-                });
-        });
+    const query = (sql, params) => new Promise((resolve, reject) => {
+        db.query(sql, params, (err, results) => (err ? reject(err) : resolve(results)));
     });
+
+    try {
+        // 1. Chặn Admin đặt phòng (Tránh lỗi khóa ngoại gây 500)
+        const userCheck = await query("SELECT id FROM user_cred WHERE id = ?", [userId]);
+        if (userCheck.length === 0) {
+            return res.status(403).json({ message: "Admin không thể đặt phòng." });
+        }
+
+        await query("START TRANSACTION");
+
+        // 2. Dọn đơn cũ
+        const oldOrders = await query("SELECT id, room_id FROM booking_order WHERE user_id = ? AND order_status = 'pending'", [userId]);
+        if (oldOrders.length > 0) {
+            await query("UPDATE rooms SET status = 'available' WHERE id = ?", [oldOrders[0].room_id]);
+            await query("DELETE FROM booking_order WHERE id = ?", [oldOrders[0].id]);
+        }
+
+        // 3. Đặt phòng mới
+        const result = await query("UPDATE rooms SET status = 'booked' WHERE id = ? AND status = 'available'", [room_id]);
+        if (result.affectedRows === 0) {
+            await query("ROLLBACK");
+            return res.status(400).json({ message: "Phòng bận." });
+        }
+
+        await query("INSERT INTO booking_order (user_id, room_id, quantity, order_status) VALUES (?, ?, ?, 'pending')", [userId, room_id, quantity]);
+        
+        await query("COMMIT");
+        res.json({ message: "Thành công" });
+
+    } catch (error) {
+        try { await query("ROLLBACK"); } catch(e) {}
+        console.error("Lỗi 500:", error);
+        res.status(500).json({ message: "Lỗi hệ thống", error: error.message });
+    }
 });
 // DELETE /api/cart/:id (Xóa đơn chờ & Trả trạng thái phòng về 'available')
 app.delete("/api/cart/:id", verifyToken, (req, res) => {
@@ -719,123 +722,259 @@ app.delete("/api/cart/:id", verifyToken, (req, res) => {
    IV. PAYMENTS/BOOKINGS ENDPOINTS
 ========================================================== */
 
-// POST /api/payments (Hoàn tất thanh toán, cập nhật trạng thái và chi tiết - CHÈN NGÀY THÁNG VÀ KIỂM TRA TRÙNG LẶP)
-app.post("/api/payments", verifyToken, (req, res) => {
-    const userId = req.userId;
-    // BẮT BUỘC có checkIn và checkOut
-    const { checkIn, checkOut, name, address, phone, method, cccd, totalPrice } = req.body; 
-    
-    // Kiểm tra đầu vào
-    if (!checkIn || !checkOut || !name || !cccd || totalPrice == null) 
-        return res.status(400).json({ message: "Thiếu thông tin bắt buộc (Ngày thuê, Tên, CCCD, Tổng tiền)." });
+/* ==========================================================
+   VNPAY PAYMENT INTEGRATION (ĐÃ SỬA FULL LOGIC)
+========================================================== */
 
-    // Kiểm tra Ngày thuê hợp lệ
+// 1. Cấu hình VNPAY Sandbox
+const vnp_Config = {
+    vnp_TmnCode: "9NUNOHFM", 
+    vnp_HashSecret: "PPO1LAM2IOV36MRA0659GQ996PIJELZG", 
+    vnp_Url: "https://sandbox.vnpayment.vn/paymentv2/vpcpay.html",
+    vnp_ReturnUrl: "http://localhost:3000/payment-result"
+};
+
+function sortObject(obj) {
+	let sorted = {};
+	let str = [];
+	let key;
+	for (key in obj){
+		if (Object.prototype.hasOwnProperty.call(obj, key)) {
+		    str.push(encodeURIComponent(key));
+		}
+	}
+	str.sort();
+    for (key = 0; key < str.length; key++) {
+        sorted[str[key]] = encodeURIComponent(obj[str[key]]).replace(/%20/g, "+");
+    }
+    return sorted;
+}
+
+// 2. API Tạo URL Thanh toán (CÓ LƯU THÔNG TIN TRƯỚC)
+// Thêm verifyToken để lấy được userId
+app.post("/api/create_payment_url", verifyToken, async function (req, res) {
+    const userId = req.userId;
+    const { amount, bankCode, language, ...bookingInfo } = req.body; // Lấy thêm thông tin bookingInfo
+
+    // A. TÌM ĐƠN HÀNG PENDING CỦA USER
+    const sqlGetOrder = "SELECT id FROM booking_order WHERE user_id = ? AND order_status = 'pending' LIMIT 1";
+    
+    db.query(sqlGetOrder, [userId], (err, rows) => {
+        if (err || rows.length === 0) return res.status(400).json({ message: "Không tìm thấy đơn hàng chờ thanh toán" });
+        
+        const orderId = rows[0].id; // Lấy ID thật trong Database làm mã giao dịch
+
+        // B. LƯU THÔNG TIN KHÁCH HÀNG VÀO BOOKING_DETAILS TRƯỚC (QUAN TRỌNG)
+        // Xóa details cũ nếu có (để tránh trùng lặp khi ấn thanh toán nhiều lần)
+        db.query("DELETE FROM booking_details WHERE booking_id = ?", [orderId], () => {
+            
+            const sqlInsertDetail = `
+                INSERT INTO booking_details 
+                (booking_id, check_in_date, check_out_date, client_name, client_phone, client_address, cccd, payment_method, total_price)
+                VALUES (?, ?, ?, ?, ?, ?, ?, 'vnpay', ?)
+            `;
+            
+            db.query(sqlInsertDetail, [
+                orderId, 
+                bookingInfo.checkIn, 
+                bookingInfo.checkOut, 
+                bookingInfo.name, 
+                bookingInfo.phone, 
+                bookingInfo.address || '', 
+                bookingInfo.cccd, 
+                amount // total price
+            ], (errInsert) => {
+                if (errInsert) {
+                    console.error("Lỗi lưu booking details:", errInsert);
+                    return res.status(500).json({ message: "Lỗi lưu thông tin đặt phòng" });
+                }
+
+                // C. TẠO URL VNPAY SAU KHI ĐÃ LƯU DB THÀNH CÔNG
+                process.env.TZ = 'Asia/Ho_Chi_Minh';
+                let date = new Date();
+                let createDate = moment(date).format('YYYYMMDDHHmmss');
+                let ipAddr = req.headers['x-forwarded-for'] || '127.0.0.1';
+
+                let tmnCode = vnp_Config.vnp_TmnCode;
+                let secretKey = vnp_Config.vnp_HashSecret;
+                let vnpUrl = vnp_Config.vnp_Url;
+                let returnUrl = vnp_Config.vnp_ReturnUrl;
+                
+                let vnp_Params = {};
+                vnp_Params['vnp_Version'] = '2.1.0';
+                vnp_Params['vnp_Command'] = 'pay';
+                vnp_Params['vnp_TmnCode'] = tmnCode;
+                vnp_Params['vnp_Locale'] = language || 'vn';
+                vnp_Params['vnp_CurrCode'] = 'VND';
+                vnp_Params['vnp_TxnRef'] = orderId; // Dùng ID Database
+                vnp_Params['vnp_OrderInfo'] = 'Thanh toan don hang #' + orderId;
+                vnp_Params['vnp_OrderType'] = 'other';
+                vnp_Params['vnp_Amount'] = amount * 100;
+                vnp_Params['vnp_ReturnUrl'] = returnUrl;
+                vnp_Params['vnp_IpAddr'] = ipAddr;
+                vnp_Params['vnp_CreateDate'] = createDate;
+
+                if(bankCode) vnp_Params['vnp_BankCode'] = bankCode;
+
+                vnp_Params = sortObject(vnp_Params);
+                let signData = qs.stringify(vnp_Params, { encode: false });
+                let hmac = crypto.createHmac("sha512", secretKey);
+                let signed = hmac.update(Buffer.from(signData, 'utf-8')).digest("hex"); 
+                vnp_Params['vnp_SecureHash'] = signed;
+                vnpUrl += '?' + qs.stringify(vnp_Params, { encode: false });
+
+                res.json({ paymentUrl: vnpUrl });
+            });
+        });
+    });
+});
+
+// 3. API Xác thực và UPDATE DATABASE
+app.get("/api/vnpay_return", function (req, res) {
+    let vnp_Params = req.query;
+    let secureHash = vnp_Params['vnp_SecureHash'];
+
+    delete vnp_Params['vnp_SecureHash'];
+    delete vnp_Params['vnp_SecureHashType'];
+
+    vnp_Params = sortObject(vnp_Params);
+
+    let secretKey = vnp_Config.vnp_HashSecret;
+    let signData = qs.stringify(vnp_Params, { encode: false });
+    let hmac = crypto.createHmac("sha512", secretKey);
+    let signed = hmac.update(Buffer.from(signData, 'utf-8')).digest("hex");     
+
+    if(secureHash === signed){
+        if(vnp_Params['vnp_ResponseCode'] === "00") {
+             // ✅ QUAN TRỌNG: CẬP NHẬT TRẠNG THÁI ĐƠN HÀNG THÀNH CÔNG
+             const orderId = vnp_Params['vnp_TxnRef'];
+             
+             const sqlUpdate = "UPDATE booking_order SET order_status = 'confirmed', updated_at = NOW() WHERE id = ?";
+             db.query(sqlUpdate, [orderId], (err, result) => {
+                 if(err) console.error("Lỗi update status:", err);
+                 
+                 res.json({code: '00', message: 'Giao dịch thành công', data: vnp_Params});
+             });
+        } else {
+             res.json({code: '97', message: 'Giao dịch thất bại', data: vnp_Params});
+        }
+    } else {
+        res.json({code: '99', message: 'Chữ ký không hợp lệ'});
+    }
+});
+/* ==========================================================
+   VNPAY PAYMENT INTEGRATION (END)
+========================================================== */
+
+// POST /api/payments - Hoàn tất thanh toán
+app.post("/api/payments", verifyToken, async (req, res) => {
+    const userId = req.userId;
+    const { checkIn, checkOut, name, address, phone, method, cccd, totalPrice } = req.body;
+
+    // 1. Kiểm tra đầu vào cơ bản
+    if (!checkIn || !checkOut || !name || !cccd || totalPrice == null) {
+        return res.status(400).json({ message: "Thiếu thông tin bắt buộc (Ngày thuê, Tên, CCCD, Tổng tiền)." });
+    }
+
     const checkInDate = new Date(checkIn);
     const checkOutDate = new Date(checkOut);
     if (isNaN(checkInDate) || isNaN(checkOutDate) || checkOutDate <= checkInDate) {
-         return res.status(400).json({ message: "Ngày check-out phải sau ngày check-in." });
+        return res.status(400).json({ message: "Ngày trả phòng phải sau ngày nhận phòng ít nhất 1 đêm." });
     }
 
-    db.beginTransaction(err => {
-        if (err) return res.status(500).json({ message: "DB error starting transaction" });
+    // Helper để chạy query bằng Promise (đã có trong index.js của bạn)
+    const runQuery = (sql, params) => new Promise((resolve, reject) => {
+        db.query(sql, params, (err, results) => (err ? reject(err) : resolve(results)));
+    });
 
-        // 1. LẤY ĐƠN ĐẶT PENDING ĐẦU TIÊN (Phải lấy thêm room_id)
-        const sqlSelectOrder = `
-            SELECT id, room_id
-            FROM booking_order 
-            WHERE user_id = ? AND order_status = 'pending' LIMIT 1
+    try {
+        // ✅ BƯỚC 1: Kiểm tra xem đây có phải tài khoản Khách hàng không (Tránh lỗi 500 khóa ngoại nếu Admin đặt)
+        const userCheck = await runQuery("SELECT id FROM user_cred WHERE id = ?", [userId]);
+        if (userCheck.length === 0) {
+            return res.status(403).json({ message: "Tài khoản Admin không được phép thực hiện thanh toán đặt phòng." });
+        }
+
+        await runQuery("START TRANSACTION");
+
+        // ✅ BƯỚC 2: Lấy đơn hàng đang chờ (pending)
+        const orders = await runQuery(
+            "SELECT id, room_id FROM booking_order WHERE user_id = ? AND order_status = 'pending' LIMIT 1",
+            [userId]
+        );
+
+        if (orders.length === 0) {
+            await runQuery("ROLLBACK");
+            return res.status(400).json({ message: "Không tìm thấy đơn đặt đang chờ. Vui lòng thêm lại vào giỏ hàng." });
+        }
+
+        const bookingId = orders[0].id;
+        const roomId = orders[0].room_id;
+
+        // ✅ BƯỚC 3: Kiểm tra trùng lịch (Logic tối ưu: StartA < EndB AND EndA > StartB)
+        const sqlOverlap = `
+            SELECT d.booking_id FROM booking_details d
+            JOIN booking_order b ON d.booking_id = b.id
+            WHERE b.room_id = ? 
+            AND b.order_status IN ('confirmed', 'checked_in')
+            AND (DATE(?) < DATE(d.check_out_date) AND DATE(?) > DATE(d.check_in_date))
+            LIMIT 1
         `;
-        db.query(sqlSelectOrder, [userId], (errOrder, orderItems) => {
-            if (errOrder) return db.rollback(() => res.status(500).json({ message: "DB error on order select", error: errOrder }));
-            if (orderItems.length === 0) return db.rollback(() => res.status(400).json({ message: "Không tìm thấy đơn đặt đang chờ. Vui lòng thêm phòng vào giỏ hàng." }));
 
-            const bookingId = orderItems[0].id; 
-            const roomId = orderItems[0].room_id; 
+        const overlaps = await runQuery(sqlOverlap, [roomId, checkOut, checkIn]);
 
-            // =========================================================
-            //  ✅ BƯỚC MỚI: KIỂM TRA TRÙNG NGÀY ĐẶT (QUAN TRỌNG NHẤT)
-            // =========================================================
-            const sqlCheckOverlap = `
-                SELECT 
-                    d.booking_id
-                FROM booking_details d
-                JOIN booking_order b ON d.booking_id = b.id
-                WHERE b.room_id = ?
-                AND b.order_status IN ('confirmed', 'checked_in')
-                AND (
-                    (d.check_in_date < ? AND d.check_out_date > ?) OR
-                    (? BETWEEN d.check_in_date AND DATE_SUB(d.check_out_date, INTERVAL 1 DAY)) OR
-                    (? BETWEEN d.check_in_date AND DATE_SUB(d.check_out_date, INTERVAL 1 DAY)) 
-                )
-                LIMIT 1
-            `;
+        if (overlaps.length > 0) {
+            // Nếu trùng: Trả phòng về available (vì lúc cho vào giỏ đã set thành booked)
+            await runQuery("UPDATE rooms SET status = 'available' WHERE id = ?", [roomId]);
+            await runQuery("ROLLBACK");
+            return res.status(409).json({ 
+                message: "Rất tiếc, phòng này vừa được người khác đặt trong khoảng thời gian này. Vui lòng chọn ngày khác hoặc phòng khác." 
+            });
+        }
 
-            // Tham số: [roomId, checkOut, checkIn, checkIn, checkOut]
-            const checkParams = [
-                roomId, checkOut, checkIn, checkIn, checkOut
-            ];
+        // ✅ BƯỚC 4: Chèn thông tin chi tiết
+        const sqlInsertDetails = `
+            INSERT INTO booking_details 
+            (booking_id, check_in_date, check_out_date, client_name, client_phone, client_address, cccd, payment_method, total_price) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `;
+        await runQuery(sqlInsertDetails, [
+            bookingId, checkIn, checkOut, name, phone || null, address || null, cccd, method || "cash", totalPrice
+        ]);
 
-            db.query(sqlCheckOverlap, checkParams, (errOverlap, overlapRows) => {
-                if (errOverlap) return db.rollback(() => res.status(500).json({ message: "Lỗi DB khi kiểm tra trùng ngày", error: errOverlap }));
-                
-                if (overlapRows.length > 0) {
-                    // Nếu trùng ngày: Phải trả phòng về trạng thái 'available' vì nó đang là 'booked'
-                    db.query("UPDATE rooms SET status = 'available' WHERE id = ?", [roomId], (errRevert) => {
-                        if (errRevert) console.error("Lỗi hoàn tác trạng thái phòng:", errRevert); 
-                        
-                        return db.rollback(() => res.status(409).json({ 
-                            message: "Phòng này đã được đặt trong khoảng ngày bạn chọn. Vui lòng chọn ngày khác.",
-                            roomId: roomId
-                        }));
-                    });
-                    return; 
-                }
-                
-                // =========================================================
-                //  BƯỚC 2: CHÈN CHI TIẾT VÀO booking_details (Nếu không trùng ngày)
-                // =========================================================
-                const sqlInsertDetails = `
-                    INSERT INTO booking_details (booking_id, check_in_date, check_out_date, client_name, client_phone, client_address, cccd, payment_method, total_price) 
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                `;
+        // ✅ BƯỚC 5: Cập nhật trạng thái đơn hàng sang 'confirmed'
+        await runQuery(
+            "UPDATE booking_order SET order_status = 'confirmed', check_in_date = ?, check_out_date = ?, updated_at = NOW() WHERE id = ?",
+            [checkIn, checkOut, bookingId]
+        );
 
-                db.query(sqlInsertDetails, [
-                    bookingId, checkIn, checkOut, name, phone || null, address || null, cccd, method || "cash", totalPrice
-                ], (errDetails) => {
-                    if (errDetails) return db.rollback(() => res.status(500).json({ message: "DB error on details insert", error: errDetails }));
+        await runQuery("COMMIT");
+        res.json({ message: "Đặt phòng thành công!", paymentId: bookingId });
 
-                    // BƯỚC 3. CẬP NHẬT TRẠNG THÁI ORDER SANG 'confirmed' VÀ LƯU NGÀY THUÊ
-                    const sqlUpdateStatus = "UPDATE booking_order SET order_status = 'confirmed', check_in_date = ?, check_out_date = ?, updated_at = NOW() WHERE id = ?";
-                    db.query(sqlUpdateStatus, [checkIn, checkOut, bookingId], (errUpdate) => {
-                        if (errUpdate) return db.rollback(() => res.status(500).json({ message: "DB error on status update", error: errUpdate }));
-
-                        // BƯỚC 4. COMMIT TRANSACTION VÀ TRẢ VỀ KẾT QUẢ
-                        db.commit(errCommit => {
-                            if (errCommit) return db.rollback(() => res.status(500).json({ message: "DB error on commit", error: errCommit }));
-                            res.json({ message: "Đặt phòng thành công", paymentId: bookingId });
-                        });
-                    });
-                });
-            }); // Đóng CheckOverlap Query
-        }); // Đóng SelectOrder Query
-    }); // Đóng BeginTransaction
+    } catch (error) {
+        await runQuery("ROLLBACK");
+        console.error("Lỗi đặt phòng:", error);
+        res.status(500).json({ message: "Lỗi hệ thống khi xử lý thanh toán", error: error.message });
+    }
 });
 
-// 🎯 API MỚI: GET /api/bookings/:id (Chi tiết đơn đặt phòng)
+// 🎯 API: GET /api/bookings/:id (Chi tiết đơn đặt phòng)
 app.get("/api/bookings/:id", verifyToken, (req, res) => {
     const userId = req.userId;
     const bookingId = req.params.id; 
 
+    // 👇 ĐÃ SỬA: Thêm dòng lấy email (ui.email) và JOIN với bảng user_info
     const sql = `
         SELECT 
             b.id AS booking_id, b.room_id, b.quantity AS num_rooms, b.created_at, b.order_status,
             r.name AS room_name, r.price_per_night, r.main_image_url AS image,
             d.check_in_date, d.check_out_date, d.client_name, d.client_phone, 
-            d.client_address, d.cccd, d.payment_method, d.total_price
+            d.client_address, d.cccd, d.payment_method, d.total_price,
+            ui.email AS client_email   -- <--- LẤY THÊM EMAIL TẠI ĐÂY
         FROM booking_order b
         JOIN rooms r ON b.room_id = r.id
         JOIN booking_details d ON b.id = d.booking_id
-        WHERE b.id = ? AND b.user_id = ? AND b.order_status != 'pending' -- Đảm bảo không lấy đơn pending
+        LEFT JOIN user_info ui ON b.user_id = ui.user_id  -- <--- KẾT NỐI BẢNG ĐỂ LẤY EMAIL
+        WHERE b.id = ? AND b.user_id = ?
     `;
 
     db.query(sql, [bookingId, userId], (err, rows) => {
@@ -844,9 +983,10 @@ app.get("/api/bookings/:id", verifyToken, (req, res) => {
             return res.status(500).json({ message: "DB error", error: err.message });
         }
         if (rows.length === 0) {
+            // Nếu không tìm thấy trong bảng chi tiết, thử tìm trong bảng order (trường hợp mới tạo chưa có detail)
             return res.status(404).json({ message: "Không tìm thấy đơn đặt phòng này." });
         }
-        res.json(rows[0]); // Trả về chi tiết của 1 đơn hàng
+        res.json(rows[0]); 
     });
 });
 
@@ -889,7 +1029,7 @@ app.delete("/api/bookings/:id", verifyToken, (req, res) => {
 });
 
 
-// GET /api/bookings (Lịch sử đặt phòng chi tiết)
+// GET /api/bookings (Lấy lịch sử đặt phòng: Confirmed và Checked_in)
 app.get("/api/bookings", verifyToken, (req, res) => {
     const userId = req.userId;
     const sql = `
@@ -900,7 +1040,8 @@ app.get("/api/bookings", verifyToken, (req, res) => {
         FROM booking_order b
         JOIN rooms r ON b.room_id = r.id
         JOIN booking_details d ON b.id = d.booking_id
-        WHERE b.user_id = ? AND b.order_status = 'confirmed'
+        -- 🚨 SỬA TẠI ĐÂY: Lấy cả confirmed và checked_in, loại bỏ cancelled
+        WHERE b.user_id = ? AND b.order_status IN ('confirmed', 'checked_in')
         ORDER BY b.created_at DESC
     `;
     db.query(sql, [userId], (err, rows) => {
@@ -1124,20 +1265,31 @@ app.delete("/api/admin/features/:id", verifyAdminToken, (req, res) => {
 // Thêm đoạn code này vào file Express Backend của bạn (trong phần ADMIN ENDPOINTS)
 
 // 🚨 API MỚI: GET /api/admin/dashboard/stats (Lấy tất cả số liệu thống kê)
+// index.js
+
+// Tìm đến route app.get("/api/admin/dashboard/stats", ...)
 app.get("/api/admin/dashboard/stats", verifyAdminToken, (req, res) => {
     
-    // 1. Tổng số Khách hàng (User)
+    // 1. Tổng số Khách hàng
     const countUsers = "SELECT COUNT(id) AS total_users FROM user_cred";
     // 2. Tổng số Phòng
     const countRooms = "SELECT COUNT(id) AS total_rooms FROM rooms";
-    // 3. Tổng số Tiện nghi (Facilities)
+    // 3. Tổng số Tiện nghi
     const countFacilities = "SELECT COUNT(id) AS total_facilities FROM facilities";
-    // 4. Tổng số Tiền đã thu (Chỉ tính các đơn đã 'paid' hoặc 'confirmed' có tổng tiền)
-    const totalRevenue = "SELECT SUM(d.total_price) AS total_revenue FROM booking_order b JOIN booking_details d ON b.id = d.booking_id WHERE b.order_status IN ('confirmed', 'paid', 'checked_in')";
-    // 5. Số đơn hàng mới (Trạng thái 'confirmed')
+
+    // 🚨 FIX TẠI ĐÂY: Cộng thêm các đơn có trạng thái rỗng hoặc NULL
+    const totalRevenue = `
+        SELECT COALESCE(SUM(d.total_price), 0) AS total_revenue 
+        FROM booking_order b 
+        JOIN booking_details d ON b.id = d.booking_id 
+        WHERE (b.order_status IN ('confirmed', 'paid', 'checked_in', 'success') 
+           OR b.order_status IS NULL 
+           OR b.order_status = '')
+    `;
+
+    // 5. Số đơn hàng mới
     const newBookings = "SELECT COUNT(id) AS new_bookings FROM booking_order WHERE order_status = 'confirmed'"; 
 
-    // Chạy tất cả truy vấn đồng thời
     Promise.all([
         new Promise((resolve, reject) => db.query(countUsers, (err, rows) => err ? reject(err) : resolve(rows[0]))),
         new Promise((resolve, reject) => db.query(countRooms, (err, rows) => err ? reject(err) : resolve(rows[0]))),
@@ -1150,15 +1302,14 @@ app.get("/api/admin/dashboard/stats", verifyAdminToken, (req, res) => {
             totalUsers: results[0].total_users,
             totalRooms: results[1].total_rooms,
             totalFacilities: results[2].total_facilities,
-            // Đảm bảo trả về 0 nếu không có doanh thu
-            totalRevenue: results[3].total_revenue || 0, 
+            totalRevenue: parseFloat(results[3].total_revenue), 
             newBookings: results[4].new_bookings,
         };
         res.json(stats);
     })
     .catch(dbErr => {
-        console.error("Lỗi DB khi lấy Dashboard Stats:", dbErr);
-        res.status(500).json({ message: "DB error on stats retrieval", error: dbErr.message });
+        console.error("Lỗi lấy Dashboard Stats:", dbErr);
+        res.status(500).json({ message: "DB error", error: dbErr.message });
     });
 });
 // Thêm đoạn code này vào file Express Backend của bạn (trong phần ADMIN ENDPOINTS)
@@ -1794,7 +1945,7 @@ app.post("/api/chatbot", (req, res) => {
 /* ==========================
    START SERVER
 ========================== */
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3001;
 
 app.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);

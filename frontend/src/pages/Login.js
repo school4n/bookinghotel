@@ -1,14 +1,12 @@
 import React, { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
-// import axios from "axios"; // Đã thay bằng axiosClient
 import axiosClient from "../api/config"; 
 
-// 🎨 CÁC ĐỊNH NGHĨA STYLE (Giữ nguyên)
-const ROYAL_COLOR = "#f3c300";
-const DARK_BG = "#0f172a";
+// 🎨 ĐỊNH NGHĨA STYLE ĐỒNG NHẤT VỚI HỆ THỐNG
+const ROYAL_COLOR = "#f3c300"; // Màu vàng nhấn
+const DARK_BLUE_BG = "#2b50d8"; // Màu xanh dương chủ đạo
 const LIGHT_BG = "#f0f2f5"; 
-const INPUT_BG = "#1e293b";
-const TEXT_COLOR = "#ccc";
+const TEXT_WHITE = "#ffffff";
 
 const styles = {
     pageContainer: {
@@ -17,58 +15,69 @@ const styles = {
         alignItems: 'center',
         minHeight: '100vh',
         backgroundColor: LIGHT_BG,
-        fontFamily: "serif",
+        fontFamily: "'Inter', sans-serif",
     },
     formContainer: {
         width: '100%',
         maxWidth: '450px',
         padding: '40px',
-        backgroundColor: DARK_BG,
-        borderRadius: '8px',
-        boxShadow: '0 10px 30px rgba(0,0,0,0.3)',
+        backgroundColor: DARK_BLUE_BG,
+        borderRadius: '12px',
+        boxShadow: '0 10px 30px rgba(0,0,0,0.2)',
         textAlign: 'center',
     },
     heading: {
         color: ROYAL_COLOR,
         marginBottom: '25px',
-        fontSize: '2rem',
+        fontSize: '1.8rem',
         fontWeight: 'bold',
         textTransform: 'uppercase',
+        letterSpacing: '1px'
     },
     formGroup: {
         marginBottom: '20px',
         textAlign: 'left',
     },
+    label: {
+        color: TEXT_WHITE,
+        display: 'block',
+        marginBottom: '8px',
+        fontSize: '0.85rem',
+        fontWeight: '600'
+    },
     inputStyle: {
         width: '100%',
-        padding: '12px',
-        borderRadius: '4px',
-        border: '1px solid #333',
-        backgroundColor: INPUT_BG,
-        color: TEXT_COLOR,
+        padding: '12px 15px',
+        borderRadius: '8px',
+        border: 'none',
+        backgroundColor: "rgba(255, 255, 255, 0.9)",
+        color: "#333",
         fontSize: '1rem',
         boxSizing: 'border-box',
+        outline: 'none',
     },
     buttonStyle: {
         width: '100%',
-        padding: '12px 20px',
+        padding: '14px',
         backgroundColor: ROYAL_COLOR,
-        color: DARK_BG,
+        color: "#000",
         border: 'none',
-        borderRadius: '4px',
-        fontWeight: 'bold',
+        borderRadius: '8px',
+        fontWeight: '800',
         cursor: 'pointer',
         fontSize: '1.1rem',
         marginTop: '10px',
-        transition: 'background-color 0.3s ease',
+        transition: 'all 0.3s ease',
+        boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
     },
     linkText: {
         marginTop: '20px',
-        color: TEXT_COLOR,
+        color: TEXT_WHITE,
     },
     errorText: {
-        color: '#e8491d', 
+        color: '#ffdad6',
         marginTop: '15px',
+        fontSize: '0.9rem'
     },
 };
 
@@ -78,9 +87,6 @@ function Login() {
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
-
-    // 💡 URL giờ đây cực kỳ ngắn gọn vì đã có baseURL trong axiosClient
-    const LOGIN_ENDPOINT = "/auth/login";
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -94,22 +100,25 @@ function Login() {
         setLoading(true);
 
         try {
-            // Sử dụng axiosClient thay cho axios trực tiếp
-            const response = await axiosClient.post(LOGIN_ENDPOINT, { username, password });
+            // Gửi yêu cầu đăng nhập tới Backend
+            const response = await axiosClient.post("/auth/login", { username, password });
 
-            // 💾 Lưu thông tin vào Local Storage
+            
             localStorage.setItem('token', response.data.token);
             localStorage.setItem('userId', response.data.userId);
             localStorage.setItem('username', response.data.username); 
+            
+            
+            localStorage.setItem('email', response.data.email || ""); 
 
-            // 📢 Kích hoạt sự kiện để Navbar/Sidebar cập nhật giao diện ngay lập tức
+            // Thông báo cho toàn hệ thống về sự thay đổi trạng thái đăng nhập
             window.dispatchEvent(new Event('auth-change')); 
             
             alert("Đăng nhập thành công!");
             navigate('/'); 
 
         } catch (err) {
-            // Xử lý lỗi tập trung hơn
+            // Hiển thị lỗi từ Backend (Ví dụ: Tài khoản bị khóa, sai pass...)
             const errorMessage = err.response?.data?.message || "Sai tên đăng nhập hoặc mật khẩu.";
             setError(errorMessage);
         } finally {
@@ -124,9 +133,7 @@ function Login() {
                 
                 <form onSubmit={handleSubmit}>
                     <div style={styles.formGroup}>
-                        <label style={{ color: TEXT_COLOR, display: 'block', marginBottom: '5px' }}>
-                            Tên đăng nhập
-                        </label>
+                        <label style={styles.label}>Tên đăng nhập</label>
                         <input
                             type="text"
                             value={username}
@@ -139,9 +146,7 @@ function Login() {
                     </div>
 
                     <div style={styles.formGroup}>
-                        <label style={{ color: TEXT_COLOR, display: 'block', marginBottom: '5px' }}>
-                            Mật khẩu
-                        </label>
+                        <label style={styles.label}>Mật khẩu</label>
                         <input
                             type="password"
                             value={password}
