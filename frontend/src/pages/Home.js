@@ -90,7 +90,12 @@ function Home() {
             try {
                 // SỬ DỤNG axiosClient: Chỉ cần truyền phần đuôi '/rooms'
                 const res = await axiosClient.get('/rooms');
-                const data = res.data.map(item => ({
+                // ✅ FIX: Kiểm tra an toàn - backend trả về array trực tiếp
+                // Nếu res.data là array -> dùng trực tiếp
+                // Nếu res.data là object có .data -> lấy .data (phòng trường hợp API thay đổi)
+                // Nếu không phải array -> dùng [] để tránh crash
+                const rawData = Array.isArray(res.data) ? res.data : (res.data?.data || []);
+                const data = rawData.map(item => ({
                     ...item,
                     image: item.main_image_url || item.image || 'placeholder.jpg', 
                     price: parseFloat(item.price_per_night) || 0,
