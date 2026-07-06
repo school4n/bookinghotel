@@ -54,12 +54,18 @@ function HotelList() {
                 let res;
                 if (hasSearchParams) {
                     const searchParams = new URLSearchParams(location.search);
-                    res = await axiosClient.get('/rooms/search/advanced', { params: searchParams });
+                    // ✅ FIX: Dùng đúng route /rooms/search thay vì /rooms/search/advanced (không tồn tại)
+                    res = await axiosClient.get('/rooms/search', { params: searchParams });
                 } else {
                     res = await axiosClient.get('/rooms');
                 }
-                const data = Array.isArray(res.data) ? res.data : (res.data.data || []);
-                const mappedRooms = data.map((item) => ({
+                // ✅ FIX: Kiểm tra an toàn trước khi map
+                // - /rooms          → trả về array trực tiếp
+                // - /rooms/search   → trả về { data: [...] }
+                const rawData = Array.isArray(res.data) 
+                    ? res.data 
+                    : (Array.isArray(res.data?.data) ? res.data.data : []);
+                const mappedRooms = rawData.map((item) => ({
                     id: item.id,
                     name: item.name || `Phòng số ${item.id}`,
                     priceFormatted: (parseFloat(item.price_per_night) || 0).toLocaleString("vi-VN") + " VNĐ",
@@ -75,6 +81,7 @@ function HotelList() {
         };
         fetchRooms();
     }, [location.search, hasSearchParams]);
+
 
     // --- CẤU HÌNH STYLE ĐỘNG ---
     const dynamicCardStyle = {
