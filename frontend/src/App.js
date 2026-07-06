@@ -28,6 +28,7 @@ import AdminUserManagement from './admin/AdminUserManagement';
 import RoomManager from './admin/RoomManager';
 import FacilitiesManager from './admin/FacilitiesManager';
 import AdminReview from './admin/AdminReview';
+import ChatbotWidget from './pages/ChatbotWidget.js';
 
 // =========================================================
 // 1. ADMIN LAYOUT WRAPPER
@@ -56,7 +57,7 @@ const UserRootLayout = () => {
             <div style={{minHeight: '60vh'}}>
                 <Outlet />
             </div>
-
+<ChatbotWidget />
             {/* Chỉ hiện phần Giới thiệu & Review ở trang chủ */}
             {isHomePage && (
                 <>

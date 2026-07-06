@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-// import axios from 'axios'; // Đã thay thế bằng axiosClient
+// import axios from 'axios'; 
 import axiosClient from "../api/config"; 
 import { FaUser, FaEnvelope, FaPhone, FaEdit, FaTrash, FaLock, FaUnlock, FaIdBadge } from 'react-icons/fa';
 
@@ -19,10 +19,17 @@ function AdminUserManagement() {
 
     const [users, setUsers] = useState([]);
     const [loading, setLoading] = useState(true);
-    const [error, setError] = useState(null);
+    const [error, setError] = useState(null); // Giữ lại state error để xử lý lỗi UI nếu cần
     const [modalUser, setModalUser] = useState(null); 
+    
+    // ✅ SỬA: State dùng để hứng dữ liệu form
     const [editData, setEditData] = useState({
-        username: '', email: '', full_name: '', phone: '', password: '', isActive: false, 
+        username: '', 
+        email: '', 
+        full_name: '', // Backend PUT yêu cầu key là full_name
+        phone: '', 
+        password: '', 
+        isActive: false, 
     });
     const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -30,13 +37,13 @@ function AdminUserManagement() {
     const fetchUsers = useCallback(async () => {
         try {
             setLoading(true);
-            
             const response = await axiosClient.get('/admin/users');
+            // Đảm bảo luôn là mảng
             setUsers(Array.isArray(response.data) ? response.data : response.data.users || []);
             setError(null);
         } catch (err) {
             console.error("Lỗi tải users:", err);
-            setError("Không thể tải danh sách người dùng. Vui lòng kiểm tra quyền hạn.");
+            setError("Không thể tải danh sách người dùng.");
         } finally {
             setLoading(false);
         }
@@ -50,9 +57,13 @@ function AdminUserManagement() {
     const handleEditClick = (user) => {
         setModalUser(user);
         setEditData({
-            username: user.username || '', email: user.email || '',
-            full_name: user.full_name || '', phone: user.phone || '',
-            isActive: user.isActive, password: ''
+            username: user.username || '', 
+            email: user.email || '',
+            // ✅ SỬA: Map 'user.name' (từ API GET) vào 'full_name' (để hiển thị trong input)
+            full_name: user.name || user.full_name || '', 
+            phone: user.phone || '',
+            isActive: user.isActive, 
+            password: ''
         });
     };
 
@@ -73,9 +84,17 @@ function AdminUserManagement() {
         } else {
             const newUsername = normalizeValue(editData.username);
             if (!newUsername) { alert("Username không được để trống."); setIsSubmitting(false); return; }
+            
+            // So sánh và tạo payload
             if (newUsername !== modalUser.username) payload.username = newUsername;
             if (normalizeValue(editData.email) !== modalUser.email) payload.email = normalizeValue(editData.email);
-            if (normalizeValue(editData.full_name) !== modalUser.full_name) payload.full_name = normalizeValue(editData.full_name);
+            
+            // ✅ SỬA: So sánh editData.full_name với modalUser.name (bản gốc)
+            // Backend PUT mong đợi key là 'full_name'
+            if (normalizeValue(editData.full_name) !== modalUser.name) {
+                payload.full_name = normalizeValue(editData.full_name);
+            }
+
             if (normalizeValue(editData.phone) !== modalUser.phone) payload.phone = normalizeValue(editData.phone);
             if (editData.password.trim() !== '') payload.password = editData.password.trim();
         }
@@ -85,7 +104,6 @@ function AdminUserManagement() {
         }
 
         try {
-            // SỬ DỤNG axiosClient cho yêu cầu PUT
             await axiosClient.put(`/admin/users/${userId}`, payload);
             alert(statusChangeOnly ? `Đã ${!currentStatus ? 'kích hoạt' : 'vô hiệu hóa'} thành công!` : "Cập nhật thành công!");
             if (!statusChangeOnly) setModalUser(null);
@@ -106,7 +124,6 @@ function AdminUserManagement() {
     const handleDeleteUser = async (userId, username) => {
         if (!window.confirm(`Bạn có chắc chắn muốn XÓA tài khoản ${username}? Thao tác này KHÔNG thể hoàn tác.`)) return;
         try {
-            // SỬ DỤNG axiosClient cho yêu cầu DELETE
             await axiosClient.delete(`/admin/users/${userId}`);
             alert(`Đã xóa tài khoản ${username}.`);
             fetchUsers();
@@ -115,7 +132,7 @@ function AdminUserManagement() {
         }
     };
 
-    // 🎨 STYLES (Giữ nguyên logic của bạn)
+    // 🎨 STYLES
     const styles = {
         container: { padding: isMobile ? '15px' : '30px', fontFamily: 'serif', backgroundColor: '#f4f6f8', minHeight: '100%' },
         title: { color: DARK_BG, marginBottom: '20px', fontSize: isMobile ? '1.5rem' : '2rem', fontWeight: 'bold' },
@@ -127,7 +144,6 @@ function AdminUserManagement() {
         card: { backgroundColor: 'white', padding: '15px', borderRadius: '8px', boxShadow: '0 2px 5px rgba(0,0,0,0.05)', border: '1px solid #ddd' },
         cardHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', paddingBottom: '10px', borderBottom: '1px solid #eee' },
         cardRow: { display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px', fontSize: '0.9rem', color: '#555' },
-        cardLabel: { fontWeight: 'bold', minWidth: '30px' },
         statusActive: { color: 'white', backgroundColor: '#28a745', padding: '4px 8px', borderRadius: '4px', fontWeight: 'bold', fontSize: '0.8rem' },
         statusInactive: { color: 'white', backgroundColor: '#ffc107', padding: '4px 8px', borderRadius: '4px', fontWeight: 'bold', fontSize: '0.8rem' },
         actionContainer: { display: 'flex', gap: '5px', justifyContent: isMobile ? 'space-between' : 'flex-start', marginTop: isMobile ? '10px' : '0' },
@@ -181,9 +197,10 @@ function AdminUserManagement() {
                             <tr key={user.id}>
                                 <td style={styles.tableCell}>{user.id}</td>
                                 <td style={{...styles.tableCell, fontWeight: 'bold'}}>{user.username}</td>
-                                <td style={styles.tableCell}>{user.full_name || '---'}</td>
+                                {/* ✅ SỬA: Dùng user.name (khớp với response GET) */}
+                                <td style={styles.tableCell}>{user.name || user.full_name || '---'}</td>
                                 <td style={styles.tableCell}>{user.email}</td>
-                                <td style={styles.tableCell}>{user.phone || '---'}</td>
+                                <td style={styles.tableCell}>{user.phone}</td>
                                 <td style={{...styles.tableCell, textAlign: 'center'}}>
                                     <span style={user.isActive ? styles.statusActive : styles.statusInactive}>{user.isActive ? 'ACTIVE' : 'LOCKED'}</span>
                                 </td>
@@ -203,7 +220,8 @@ function AdminUserManagement() {
                             <span style={user.isActive ? styles.statusActive : styles.statusInactive}>{user.isActive ? 'ACTIVE' : 'LOCKED'}</span>
                         </div>
                         <div style={styles.cardRow}><FaUser color="#888"/> <strong>{user.username}</strong></div>
-                        <div style={styles.cardRow}><FaIdBadge color="#888"/> {user.full_name || 'Chưa cập nhật tên'}</div>
+                        {/* ✅ SỬA: Dùng user.name cho mobile */}
+                        <div style={styles.cardRow}><FaIdBadge color="#888"/> {user.name || user.full_name || 'Chưa cập nhật tên'}</div>
                         <div style={styles.cardRow}><FaEnvelope color="#888"/> {user.email}</div>
                         <div style={styles.cardRow}><FaPhone color="#888"/> {user.phone || 'Chưa có SĐT'}</div>
                         {renderActions(user)}
@@ -223,6 +241,7 @@ function AdminUserManagement() {
                         <label style={styles.label}>Email</label>
                         <input style={styles.input} type="email" name="email" value={editData.email} onChange={handleEditChange} />
                         
+                        {/* Input này vẫn dùng name='full_name' để khớp với editData */}
                         <label style={styles.label}>Họ Tên</label>
                         <input style={styles.input} type="text" name="full_name" value={editData.full_name} onChange={handleEditChange} />
                         

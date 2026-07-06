@@ -3,11 +3,10 @@ import { useNavigate, Link } from "react-router-dom";
 import axiosClient from "../api/config"; 
 import emailjs from '@emailjs/browser'; 
 
-// 🎨 CẬP NHẬT ĐỊNH NGHĨA STYLE MÀU XANH
-const ROYAL_COLOR = "#f3c300"; // Màu vàng nhấn
-const DARK_BLUE_BG = "#2b50d8"; // Màu xanh dương chủ đạo (khớp với ảnh bạn gửi)
+// 🎨 CÁC ĐỊNH NGHĨA STYLE (Giữ nguyên như cũ)
+const ROYAL_COLOR = "#f3c300"; 
+const DARK_BLUE_BG = "#2b50d8"; 
 const LIGHT_BG = "#f0f2f5"; 
-const INPUT_LIGHT_BG = "#e8f0fe"; // Màu nền input xanh nhạt khi focus
 const TEXT_WHITE = "#ffffff";
 
 const styles = {
@@ -23,7 +22,7 @@ const styles = {
         width: '100%',
         maxWidth: '450px',
         padding: '40px',
-        backgroundColor: DARK_BLUE_BG, // 🔵 Thay đổi từ DARK_BG sang xanh dương
+        backgroundColor: DARK_BLUE_BG,
         borderRadius: '12px',
         boxShadow: '0 10px 30px rgba(0,0,0,0.2)',
         textAlign: 'center',
@@ -41,7 +40,7 @@ const styles = {
         textAlign: 'left',
     },
     label: {
-        color: TEXT_WHITE, // ⚪ Chuyển nhãn sang màu trắng để nổi bật trên nền xanh
+        color: TEXT_WHITE,
         display: 'block',
         marginBottom: '8px',
         fontSize: '0.85rem',
@@ -51,9 +50,9 @@ const styles = {
         width: '100%',
         padding: '12px 15px',
         borderRadius: '8px',
-        border: 'none', // Bỏ viền để trông hiện đại hơn
-        backgroundColor: "rgba(255, 255, 255, 0.9)", // ⚪ Nền trắng mờ cho input
-        color: "#333", // Chữ trong input màu tối để dễ đọc
+        border: 'none',
+        backgroundColor: "rgba(255, 255, 255, 0.9)",
+        color: "#333",
         fontSize: '1rem',
         boxSizing: 'border-box',
         outline: 'none',
@@ -69,19 +68,16 @@ const styles = {
         cursor: 'pointer',
         fontSize: '1rem',
         marginTop: '15px',
-        marginLeft: '0px',
-        marginRight: '0px',
-        marginBottom: '0px',
         transition: 'all 0.3s ease',
         boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
     },
     linkText: {
         marginTop: '25px',
-        color: TEXT_WHITE, // ⚪ Link màu trắng
+        color: TEXT_WHITE,
         fontSize: '0.9rem'
     },
     errorText: {
-        color: '#ffdad6', // Màu đỏ nhạt để dễ đọc trên nền xanh
+        color: '#ffdad6',
         marginTop: '15px',
         fontSize: '0.9rem'
     }
@@ -89,20 +85,23 @@ const styles = {
 
 function Register() {
     const navigate = useNavigate();
+    
+    // ✅ 1. Thêm state cho Name và Phone
     const [username, setUsername] = useState('');
+    const [name, setName] = useState('');     // Thêm state Họ tên
+    const [phone, setPhone] = useState('');   // Thêm state SĐT
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
+    
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
 
-    // ✅ Khởi tạo EmailJS với Public Key của bạn
     useEffect(() => {
         emailjs.init("seajRlYP6YCpKbOZQ");
     }, []);
 
     const sendWelcomeEmail = (targetEmail, targetName) => {
-        // ✅ Cấu trúc data gửi đi khớp 100% với {{name}} và {{email}} trong Template của bạn
         const templateParams = {
             name: targetName,  
             email: targetEmail 
@@ -110,7 +109,7 @@ function Register() {
 
         emailjs.send(
             'service_iyu6lx9', 
-            'template_vx7buky', // ✅ Đã cập nhật Template ID mới từ ảnh của bạn
+            'template_vx7buky', 
             templateParams
         )
         .then((res) => {
@@ -125,7 +124,8 @@ function Register() {
         e.preventDefault();
         setError('');
 
-        if (!username || !password || !email) {
+        // ✅ Kiểm tra nhập đủ thông tin (bao gồm name và phone)
+        if (!username || !password || !email || !name || !phone) {
             setError("Vui lòng nhập đầy đủ thông tin.");
             return;
         }
@@ -138,16 +138,21 @@ function Register() {
         setLoading(true);
 
         try {
-            // 1. Gửi yêu cầu đăng ký lên Server Backend
-            const response = await axiosClient.post("/auth/register", { username, password, email });
+           
+            const response = await axiosClient.post("/auth/register", { 
+                username, 
+                password, 
+                email,
+                name: name,   
+                phone: phone  
+            });
 
-            // 2. Lưu thông tin xác thực
             localStorage.setItem('token', response.data.token);
             localStorage.setItem('userId', response.data.userId);
             localStorage.setItem('username', response.data.username);
 
-            // 3. Kích hoạt gửi email tự động
-            sendWelcomeEmail(email, username);
+           
+            sendWelcomeEmail(email, name);
 
             window.dispatchEvent(new Event('auth-change'));
             alert("Đăng ký thành công! Hãy kiểm tra hòm thư chào mừng của bạn.");
@@ -179,6 +184,32 @@ function Register() {
                         />
                     </div>
                     
+                    {/* ✅ 3. Thêm ô nhập Họ và Tên */}
+                    <div style={styles.formGroup}>
+                        <label style={styles.label}>Họ và Tên</label>
+                        <input
+                            type="text"
+                            value={name}
+                            onChange={(e) => setName(e.target.value)}
+                            placeholder="Nguyễn Văn A"
+                            style={styles.inputStyle}
+                            required
+                        />
+                    </div>
+
+                    {/* ✅ 4. Thêm ô nhập Số điện thoại */}
+                    <div style={styles.formGroup}>
+                        <label style={styles.label}>Số điện thoại</label>
+                        <input
+                            type="tel"
+                            value={phone}
+                            onChange={(e) => setPhone(e.target.value)}
+                            placeholder="09xx..."
+                            style={styles.inputStyle}
+                            required
+                        />
+                    </div>
+
                     <div style={styles.formGroup}>
                         <label style={styles.label}>Địa chỉ Email</label>
                         <input

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 
-// 🎨 MÀU SẮC & STYLE DÙNG CHUNG
+
 const TRIP_BLUE = "#2b56cc"; 
 const TEXT_DARK = "#333";
 const TEXT_GREY = "#666";
@@ -10,7 +10,7 @@ const SearchWidget = ({ isMobile }) => {
     const navigate = useNavigate();
     const location = useLocation();
 
-    // Helper: Lấy chuỗi ngày định dạng chuẩn YYYY-MM-DD
+
     const getToday = () => new Date().toISOString().split('T')[0];
     const getTomorrow = (fromDateStr) => {
         const d = fromDateStr ? new Date(fromDateStr) : new Date();
@@ -26,7 +26,7 @@ const SearchWidget = ({ isMobile }) => {
         maxPrice: "", 
     });
 
-    // 🔄 ĐỒNG BỘ TỪ URL: Giữ dữ liệu khi quay lại trang chủ
+
     useEffect(() => {
         const params = new URLSearchParams(location.search);
         if (params.has("checkIn")) {
@@ -48,7 +48,7 @@ const SearchWidget = ({ isMobile }) => {
         setFilters(prev => {
             const newFilters = { ...prev, [name]: value };
             
-            // ĐỘ ƯU TIÊN 1: Nếu đổi ngày nhận, tự động dời ngày trả lên ít nhất +1 ngày
+
             if (name === "checkIn") {
                 const checkInDate = new Date(value);
                 const checkOutDate = new Date(newFilters.checkOut);
@@ -60,9 +60,9 @@ const SearchWidget = ({ isMobile }) => {
         });
     };
 
-    // 🚀 HÀM CHUYỂN HƯỚNG QUAN TRỌNG
+
     const handleSearch = () => {
-        // Validation: Ngày trả phòng không được nhỏ hơn hoặc bằng ngày nhận
+
         if (new Date(filters.checkIn) >= new Date(filters.checkOut)) {
             alert("Lỗi: Ngày trả phòng phải sau ngày nhận phòng ít nhất 1 ngày!");
             return;
@@ -70,16 +70,16 @@ const SearchWidget = ({ isMobile }) => {
 
         const params = new URLSearchParams();
         
-        // 1. Ngày tháng (Ưu tiên 1 - Dùng để chặn phòng bận tại Backend)
+
         params.set("checkIn", filters.checkIn);
         params.set("checkOut", filters.checkOut);
         
-        // 2. Giá cả (Ưu tiên 2)
+   
         if (filters.maxPrice) {
             params.set("maxPrice", filters.maxPrice);
         }
 
-        // 3. Số người (Ưu tiên 3 - Gộp thành 'guests' để khớp API Advanced)
+
         const totalGuests = parseInt(filters.adults) + parseInt(filters.children);
         params.set("guests", totalGuests);
         

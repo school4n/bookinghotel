@@ -4,6 +4,11 @@ const mysql = require("mysql");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 
+const { GoogleGenerativeAI } = require("@google/generative-ai");
+
+const genAI = new GoogleGenerativeAI("AIzaSyB9XnlTLiD07bpaxqn3xPloMOzHeiuHdDk"); // Thay bằng key của bạn hoặc process.env.GEMINI_API_KEY
+const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" }); // Hoặc gemini-pro
+
 const moment = require('moment'); // Để định dạng ngày giờ chuẩn VNPAY
 const qs = require('qs');         // Để sắp xếp tham số URL
 const crypto = require('crypto'); // Để tạo mã bảo mật (hash)
@@ -109,11 +114,14 @@ function verifyAdminToken(req, res, next) {
 
 
 /* ==========================================================
-   I. USER AUTH ENDPOINTS (user_cred)
+   I. USER AUTH ENDPOINTS (user_cred)
 ========================================================== */
 app.post("/api/auth/register", async (req, res) => {
     try {
-        const { username, password, email } = req.body;
+        // 1. SỬA: Nhận biến 'name' thay vì 'full_name'
+        // Kiểm tra xem bên Frontend gửi 'phone' hay 'phone_number' (ở đây mình để 'phone' cho gọn giống DB)
+        const { username, password, email, name, phone } = req.body;
+        
         if (!username || !password) return res.status(400).json({ message: "Thiếu username hoặc password" });
         
         const emailToCheck = email || null; 
@@ -136,12 +144,19 @@ app.post("/api/auth/register", async (req, res) => {
             if (rows.length > 0) return res.status(409).json({ message: "Username hoặc email đã tồn tại" });
 
             const hash = await bcrypt.hash(password, SALT_ROUNDS);
+            
+            // Chèn vào user_cred
             db.query("INSERT INTO user_cred (username, password) VALUES (?, ?)", [username, hash], (err2, result) => {
                 if (err2) return res.status(500).json({ message: "DB error on user_cred insert", error: err2 });
                 const userId = result.insertId;
                 
-                db.query("INSERT INTO user_info (user_id, email) VALUES (?, ?)", [userId, emailToCheck], (err3) => {
+                // 2. SỬA: Chèn biến 'name' và 'phone' vào bảng user_info
+                // Lưu ý: Cột trong DB là `name` và `phone`
+                const sqlUserInfo = "INSERT INTO user_info (user_id, email, name, phone) VALUES (?, ?, ?, ?)";
+                
+                db.query(sqlUserInfo, [userId, emailToCheck, name, phone], (err3) => {
                     if (err3) console.warn("Không chèn được vào user_info:", err3);
+                    
                     const token = jwt.sign({ id: userId }, JWT_SECRET, { expiresIn: "7d" });
                     res.json({ message: "Đăng ký thành công", token, userId, username });
                 });
@@ -304,8 +319,7 @@ app.get("/api/rooms", (req, res) => {
     });
 });
 
-// GET /api/rooms/search
-// Phiên bản "Siêu Cứng": Ép kiểu ngày tháng và in log chi tiết
+
 app.get("/api/rooms/search", (req, res) => {
     const { checkIn, checkOut } = req.query;
 
@@ -316,9 +330,7 @@ app.get("/api/rooms/search", (req, res) => {
     console.log(`\n🔍 --- DEBUG SEARCH ---`);
     console.log(`📅 Khách tìm: ${checkIn} -> ${checkOut}`);
 
-    // LOGIC: Tìm ID các phòng đang bận, sau đó loại trừ ra.
-    // Sử dụng DATE() để cắt bỏ giờ phút giây, chỉ so sánh ngày.
-    
+
     const sql = `
         SELECT r.*, GROUP_CONCAT(rf.facility_id) AS facility_ids
         FROM rooms r
@@ -1850,10 +1862,10 @@ app.get("/api/rooms/search/advanced", (req, res) => {
     const { checkIn, checkOut, maxPrice, guests } = req.query;
     const queryParams = [];
 
-    // Lấy các phòng đang hoạt động
+
     let sql = `SELECT r.* FROM rooms r WHERE r.status IN ('active', 'available', 'booked') `;
 
-    // Lọc ngày trống: Phòng KHÔNG được có đơn đặt nào trùng vào khoảng ngày này
+ 
     if (checkIn && checkOut) {
         sql += `
             AND NOT EXISTS (
@@ -1881,66 +1893,167 @@ app.get("/api/rooms/search/advanced", (req, res) => {
 
     db.query(sql, queryParams, (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
-        res.json(rows); // Trả về mảng trực tiếp cho Frontend dễ map
+        res.json(rows); 
     });
 });
 
-// Thêm vào file index.js của bạn
 
-app.post("/api/chatbot", (req, res) => {
-    const userMessage = req.body.message.toLowerCase();
-    
-    // 1. Phân tích ý định người dùng (Simple NLP bằng từ khóa)
-    let maxPrice = null;
-    let guests = 1;
-    
-    // Quét giá tiền
-    if (userMessage.includes("dưới 500") || userMessage.includes("500k")) maxPrice = 500000;
-    else if (userMessage.includes("dưới 1 triệu") || userMessage.includes("1tr")) maxPrice = 1000000;
-    else if (userMessage.includes("dưới 5 triệu") || userMessage.includes("5tr")) maxPrice = 5000000;
 
-    // Quét số lượng khách
-    const guestMatch = userMessage.match(/(\d+)\s*khách/) || userMessage.match(/cho\s*(\d+)\s*người/);
-    if (guestMatch) guests = parseInt(guestMatch[1]);
+app.post("/api/chatbot", async (req, res) => {
+    try {
+        const userMessage = req.body.message;
+        if (!userMessage || typeof userMessage !== 'string') return res.json({ reply: "Tin nhắn lỗi." });
 
-    // 2. Nếu người dùng hỏi về tìm phòng
-    if (userMessage.includes("tìm phòng") || userMessage.includes("còn phòng") || userMessage.includes("phòng trống")) {
-        let sql = `SELECT name, price_per_night, max_guests FROM rooms WHERE status = 'available'`;
-        let params = [];
+        const lowerMessage = userMessage.toLowerCase().trim();
+        const searchKeywords = ["tìm", "còn phòng", "phòng", "giá", "đặt", "thuê", "xem"];
+        const isLookingForRoom = searchKeywords.some(k => lowerMessage.includes(k));
 
-        if (maxPrice) {
-            sql += " AND price_per_night <= ?";
-            params.push(maxPrice);
-        }
-        sql += " AND max_guests >= ?";
-        params.push(guests);
-
-        db.query(sql, params, (err, rows) => {
-            if (err) return res.json({ reply: "Xin lỗi, tôi gặp lỗi khi truy cập dữ liệu." });
+        if (isLookingForRoom) {
             
-            if (rows.length === 0) {
-                return res.json({ reply: `Rất tiếc, tôi không tìm thấy phòng nào phù hợp cho ${guests} khách${maxPrice ? ` với giá dưới ${maxPrice.toLocaleString()}đ` : ""}.` });
+            let maxPrice = null;
+            let guests = 1; 
+            let nameKeyword = "";
+
+            // --- 1. XỬ LÝ GIÁ (Hardcode như bạn muốn) ---
+            if (lowerMessage.includes("dưới 500") || lowerMessage.includes("500k")) maxPrice = 500000;
+            else if (lowerMessage.includes("dưới 1 triệu") || lowerMessage.includes("1tr")) maxPrice = 1000000;
+            else if (lowerMessage.includes("dưới 2 triệu") || lowerMessage.includes("2tr")) maxPrice = 2000000;
+            else if (lowerMessage.includes("dưới 3 triệu") || lowerMessage.includes("3tr")) maxPrice = 3000000;
+
+            // --- 2. XỬ LÝ SỐ NGƯỜI ---
+            const guestMatch = lowerMessage.match(/(\d+)\s*(khách|người|ng)/) || lowerMessage.match(/cho\s*(\d+)/);
+            if (guestMatch) guests = parseInt(guestMatch[1]);
+
+            // --- 3. XỬ LÝ TÊN PHÒNG (REGEX ƯU TIÊN) ---
+            // Bắt cụm từ sau chữ "phòng"
+            const detailedMatch = lowerMessage.match(/phòng\s+([a-zA-Z0-9à-ỹ\s]+)/);
+            if (detailedMatch) {
+                let potentialName = detailedMatch[1].trim();
+                // Từ khóa dừng để cắt chuỗi rác
+                const stopWords = ["giá", "dưới", "trên", "tầm", "khoảng", "cho", "có", "tại", "ở", "là"];
+                let words = potentialName.split(" ");
+                let cleanWords = [];
+                for (let word of words) {
+                    if (stopWords.includes(word)) break;
+                    cleanWords.push(word);
+                }
+                nameKeyword = cleanWords.join(" ").trim();
             }
 
-            let reply = `Tôi tìm thấy ${rows.length} phòng phù hợp cho bạn: \n`;
-            rows.slice(0, 3).forEach(room => {
-                reply += `- ${room.name}: ${parseFloat(room.price_per_night).toLocaleString()}đ/đêm \n`;
-            });
-            reply += "\nBạn có muốn xem chi tiết không?";
-            res.json({ reply });
-        });
-    } 
-    // 3. Các câu hỏi thông thường khác
-    else if (userMessage.includes("xin chào") || userMessage.includes("hi")) {
-        res.json({ reply: "Xin chào! Tôi là trợ lý ảo của HotelBooking. Tôi có thể giúp bạn tìm phòng theo giá và số lượng người." });
+            // Nếu Regex không bắt được gì (ví dụ khách chỉ chat "tìm phòng vip"), dùng Hardcode fallback
+            if (!nameKeyword) {
+                if (lowerMessage.includes("vip")) nameKeyword = "VIP";
+                else if (lowerMessage.includes("deluxe")) nameKeyword = "Deluxe";
+                else if (lowerMessage.includes("standard")) nameKeyword = "Standard";
+                else if (lowerMessage.includes("family")) nameKeyword = "Family";
+                else if (lowerMessage.includes("double")) nameKeyword = "Double";
+                else if (lowerMessage.includes("single")) nameKeyword = "Single";
+            }
+
+            // --- 4. TẠO SQL QUERY (LẤY RỘNG - SEARCH BROAD) ---
+            // Chiến thuật: Cứ lấy hết danh sách ra trước, rồi lọc sau
+            let sql = `SELECT id, name, price_per_night, max_guests, description 
+                       FROM rooms 
+                       WHERE status IN ('available', 'active')`;
+            let params = [];
+
+            if (maxPrice) { sql += " AND price_per_night <= ?"; params.push(maxPrice); }
+            sql += " AND max_guests >= ?"; params.push(guests);
+
+            if (nameKeyword) {
+                sql += " AND name LIKE ?";
+                params.push(`%${nameKeyword}%`);
+                // Vẫn sắp xếp để ưu tiên tên giống nhất lên đầu
+                sql += ` ORDER BY CASE WHEN name = ? THEN 1 ELSE 2 END, price_per_night ASC`;
+                params.push(nameKeyword);
+            } else {
+                sql += " ORDER BY price_per_night ASC";
+            }
+            
+            // Lấy nhiều kết quả một chút để lọc
+            sql += " LIMIT 10"; 
+
+            // --- 5. GỌI DATABASE ---
+            try {
+                const executeQuery = (query, args) => {
+                    return new Promise((resolve, reject) => {
+                        if (!db) return reject(new Error("No DB Connection"));
+                        db.query(query, args, (err, rows) => {
+                            if (err) return reject(err);
+                            resolve(rows);
+                        });
+                    });
+                };
+                const rows = await executeQuery(sql, params);
+
+                if (!rows || rows.length === 0) {
+                     return res.json({ reply: `Không tìm thấy phòng nào phù hợp.` });
+                }
+
+                // ==========================================================
+                // --- 6. LOGIC "THÔNG MINH": LỌC KẾT QUẢ (THE MAGIC) ---
+                // ==========================================================
+                
+                let finalRooms = rows;
+                let isExactFound = false;
+
+                if (nameKeyword) {
+                    // Kiểm tra xem có phòng nào trùng tên KHỚP 100% không?
+                    // (So sánh không phân biệt hoa thường)
+                    const exactMatchRoom = rows.find(r => r.name.toLowerCase() === nameKeyword.toLowerCase());
+
+                    if (exactMatchRoom) {
+                        // NẾU CÓ: Chỉ lấy đúng 1 phòng này, vứt hết các phòng khác (VIP 2, VIP 3...)
+                        finalRooms = [exactMatchRoom];
+                        isExactFound = true;
+                    } 
+                   
+                }
+
+          
+                if (!isExactFound && finalRooms.length > 3) {
+                    finalRooms = finalRooms.slice(0, 3);
+                }
+
+         
+                let reply = "";
+                
+                if (isExactFound) {
+                   
+                    const room = finalRooms[0];
+                    reply += `🎯 **Tìm thấy chính xác phòng ${room.name}!**\n`;
+                    reply += `💰 Giá: ${parseFloat(room.price_per_night).toLocaleString()} đ/đêm\n`;
+                    reply += `👥 Tối đa: ${room.max_guests} người\n`;
+                    reply += `👉 [XEM CHI TIẾT & ĐẶT NGAY](/rooms/${room.id})`; 
+                } else {
+             
+                    reply += `✅ Tìm thấy ${rows.length} phòng có từ khoá "${nameKeyword || 'này'}":\n\n`;
+                    finalRooms.forEach(room => {
+                        reply += `🏨 **${room.name}**\n💰 ${parseFloat(room.price_per_night).toLocaleString()} đ/đêm\n🔗 [Xem chi tiết](/rooms/${room.id})\n\n`;
+                    });
+                    if (rows.length > 3) reply += `...và các phòng khác.`;
+                }
+
+                return res.json({ reply });
+
+            } catch (err) {
+                console.error(err);
+                return res.json({ reply: "Lỗi kết nối." });
+            }
+
+        } else {
+  
+            try {
+                const prompt = `Bạn là lễ tân. Trả lời ngắn gọn: "${userMessage}"`;
+                const result = await model.generateContent(prompt);
+                const response = await result.response;
+                return res.json({ reply: response.text() });
+            } catch (e) { return res.json({ reply: "Xin lỗi, tôi đang bận." }); }
+        }
+    } catch (e) {
+        res.status(500).json({ reply: "Lỗi Server." });
     }
-    else if (userMessage.includes("địa chỉ") || userMessage.includes("ở đâu")) {
-        res.json({ reply: "Khách sạn chúng tôi nằm tại trung tâm Quận 1, TP. Hồ Chí Minh." });
-    }
-    else {
-        res.json({ reply: "Xin lỗi, tôi chưa hiểu ý bạn. Bạn có thể hỏi ví dụ: 'Tìm phòng cho 2 người giá dưới 1tr' không?" });
-    }
-});
+});ty
 
 /* ==========================
    START SERVER

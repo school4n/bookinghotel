@@ -1,9 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-// import axios from "axios"; // Thay thế bằng axiosClient
-import axiosClient from "../api/config"; 
-import ChatbotWidget from "./ChatbotWidget";
-import SearchWidget from "./SearchWidget"; 
+import axiosClient from "../api/config";
+import SearchWidget from "./SearchWidget";
 
 // 🎨 MÀU SẮC
 const TRIP_ORANGE = "#ff9500"; 
@@ -86,28 +84,6 @@ function Home() {
     const [displayRooms, setDisplayRooms] = useState([]); 
     const [loading, setLoading] = useState(true);
     const [hoveredCard, setHoveredCard] = useState(null);
-
-// <<<<<<< HEAD
-//     const API_URL = "https://my-backend-mocha-phi.vercel.app/api/rooms";
-
-    // Hàm chọn N phòng ngẫu nhiên
-    const selectRandomRooms = (data, count = 3) => {
-        if (!data || data.length === 0) return [];
-        const shuffled = [...data].sort(() => 0.5 - Math.random());
-        return shuffled.slice(0, count);
-    };
-
-    const normalizeRoomData = (data) => {
-        return data.map(item => ({
-            ...item,
-            image: item.main_image_url || item.image || 'placeholder.jpg', 
-            price: parseFloat(item.price_per_night) || 0,
-            beds: parseInt(item.beds) || 1,
-            view: item.view || 'Đa dạng',
-            description: item.description || '',
-        }));
-    };
-
 
     useEffect(() => {
         const fetchProducts = async () => {
@@ -199,8 +175,6 @@ function Home() {
                     ))
                 )}
             </div>
-
-            <ChatbotWidget />
         </div>
     );
 }

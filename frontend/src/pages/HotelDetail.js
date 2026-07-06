@@ -357,7 +357,9 @@ function HotelDetail() {
                             <span style={{fontSize: '3rem', fontWeight: '900', color: ROYAL_COLOR}}>{averageRating}</span>
                             <span style={{fontSize: '1rem', color: '#888', marginLeft: '5px'}}>/ 5.0</span>
                         </div>
-                        <div style={{color: ROYAL_COLOR, fontWeight: 'bold'}}><FaStar size={20} /> <FaStar size={20} /> <FaStar size={20} /></div>
+                        <div style={{color: ROYAL_COLOR, fontWeight: 'bold'}}>
+    <FaStar size={20} /> <FaStar size={20} /> <FaStar size={20} /> <FaStar size={20} /> <FaStar size={20} />
+</div>
                     </div>
                    <div style={styles.mapBox}>
     <iframe 

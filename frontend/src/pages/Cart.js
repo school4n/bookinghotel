@@ -41,7 +41,6 @@ function Cart() {
     const [paymentResult, setPaymentResult] = useState(null);
     const token = localStorage.getItem('token');
 
-    // 👇 ĐÃ XÓA emailjs.init ĐỂ TRÁNH XUNG ĐỘT (SẼ TRUYỀN KEY TRỰC TIẾP)
     useEffect(() => {
         const handleResize = () => setIsMobile(window.innerWidth < 768);
         window.addEventListener('resize', handleResize);
@@ -86,7 +85,7 @@ function Cart() {
 
     useEffect(() => { fetchCartItems(); }, [fetchCartItems]);
 
-    // === 🛠️ ĐÃ SỬA: HÀM GỬI MAIL CÓ TRUYỀN PUBLIC KEY ===
+   
     const sendConfirmationEmail = (paymentId, bookingData, roomInfo) => {
         const targetEmail = checkoutInfo.email; 
         if (!targetEmail) return;
@@ -103,11 +102,10 @@ function Cart() {
             total_price: bookingData.totalPrice.toLocaleString() 
         };
 
-        const EMAIL_PUBLIC_KEY = "seajRlYP6YCpKbOZQ"; // 🔑 Key của bạn
+        const EMAIL_PUBLIC_KEY = "seajRlYP6YCpKbOZQ"; 
 
         console.log("🚀 Đang gửi mail Tiền mặt...", templateParams);
 
-        // 👇 TRUYỀN KEY VÀO THAM SỐ THỨ 4 (QUAN TRỌNG)
         emailjs.send('service_iyu6lx9', 'template_9w1gpjo', templateParams, EMAIL_PUBLIC_KEY)
             .then((res) => { console.log("✅ EmailJS SUCCESS!", res.status, res.text); })
             .catch((err) => { console.error("❌ EmailJS FAILED...", err); });
@@ -134,7 +132,7 @@ function Cart() {
         
         setIsProcessing(true);
         try {
-            // CASE 1: VNPAY
+          
             if (method === 'vnpay') {
                 const res = await axiosClient.post('/create_payment_url', { 
                     amount: cartTotal,
