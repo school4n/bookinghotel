@@ -20,40 +20,96 @@ app.use(express.json());
 // ==========================
 // Cấu hình CSDL TiDB Cloud
 // ==========================
+const db = mysql.createConnection({
+    host: process.env.DB_HOST || 'gateway01.ap-southeast-1.prod.aws.tidbcloud.com', // Lấy từ HOST
+    port: process.env.DB_PORT || 4000,                                             // Lấy từ PORT
+    user: process.env.DB_USER || '3qhZS3hkjF2gDVy.root',                           // Lấy từ USERNAME
+    password: process.env.DB_PASS || 'ZVPPWHnjwITbQw1P',                      // Mật khẩu khi nhấn Generate
+    database: process.env.DB_NAME || 'khachsan',                                   // Lấy từ DATABASE
+    ssl: {
+        minVersion: 'TLSv1.2',
+        rejectUnauthorized: false // TiDB Cloud yêu cầu SSL an toàn
+    }
+});
+
+db.connect((err) => {
+    if (err) {
+        console.error('Lỗi kết nối TiDB Cloud:', err);
+        return;
+    }
+    console.log('Đã kết nối thành công đến TiDB Cloud (khachsan)!');
+});
+
+
+// Chạy định kỳ mỗi 10 phút để dọn dẹp giỏ hàng quá hạn
+setInterval(() => {
+    const timeoutSql = `
+        UPDATE rooms 
+        SET status = 'available' 
+        WHERE id IN (
+            SELECT room_id FROM booking_order 
+            WHERE order_status = 'pending' 
+            AND created_at < NOW() - INTERVAL 30 MINUTE
+        )
+    `;
+    db.query(timeoutSql, (err) => {
+        if (err) console.error("Lỗi dọn dẹp giỏ hàng quá hạn:", err);
+        else {
+            db.query("DELETE FROM booking_order WHERE order_status = 'pending' AND created_at < NOW() - INTERVAL 30 MINUTE");
+        }
+    });
+}, 600000); // 10 phút
+// const express = require("express");
+// const cors = require("cors");
+// const mysql = require("mysql");
+// const bcrypt = require("bcrypt");
+// const jwt = require("jsonwebtoken");
+
+// const moment = require('moment'); // Để định dạng ngày giờ chuẩn VNPAY
+// const qs = require('qs');         // Để sắp xếp tham số URL
+// const crypto = require('crypto'); // Để tạo mã bảo mật (hash)
+
+// const app = express();
+// app.use(cors());
+// app.use(express.json());
+
+// // ==========================
+// // Cấu hình CSDL TiDB Cloud
+// // ==========================
+// // const db = mysql.createConnection({
+// //     host: process.env.DB_HOST || 'gateway01.ap-southeast-1.prod.aws.tidbcloud.com', // Lấy từ HOST
+// //     port: process.env.DB_PORT || 4000,                                             // Lấy từ PORT
+// //     user: process.env.DB_USER || '3qhZS3hkjF2gDVy.root',                           // Lấy từ USERNAME
+// //     password: process.env.DB_PASS || 'ZVPPWHnjwITbQw1P',                      // Mật khẩu khi nhấn Generate
+// //     database: process.env.DB_NAME || 'khachsan',                                   // Lấy từ DATABASE
+// //     ssl: {
+// //         minVersion: 'TLSv1.2',
+// //         rejectUnauthorized: true // TiDB Cloud yêu cầu SSL an toàn
+// //     }
+// // });
+// // db.connect((err) => {
+// //     if (err) {
+// //         console.error('Lỗi kết nối TiDB Cloud:', err);
+// //         return;
+// //     }
+// //     console.log('Đã kết nối thành công đến TiDB Cloud (khachsan)!');
+// // });
+
+
+
 // const db = mysql.createConnection({
-//     host: process.env.DB_HOST || 'gateway01.ap-southeast-1.prod.aws.tidbcloud.com', // Lấy từ HOST
-//     port: process.env.DB_PORT || 4000,                                             // Lấy từ PORT
-//     user: process.env.DB_USER || '3qhZS3hkjF2gDVy.root',                           // Lấy từ USERNAME
-//     password: process.env.DB_PASS || 'ZVPPWHnjwITbQw1P',                      // Mật khẩu khi nhấn Generate
-//     database: process.env.DB_NAME || 'khachsan',                                   // Lấy từ DATABASE
-//     ssl: {
-//         minVersion: 'TLSv1.2',
-//         rejectUnauthorized: true // TiDB Cloud yêu cầu SSL an toàn
-//     }
+//     host: "localhost",
+//     user: "root",
+//     password: "",
+//     database: "khachsan",
 // });
 // db.connect((err) => {
 //     if (err) {
-//         console.error('Lỗi kết nối TiDB Cloud:', err);
-//         return;
+//         console.error("❌ Lỗi kết nối MySQL:", err);
+//         process.exit(1);
 //     }
-//     console.log('Đã kết nối thành công đến TiDB Cloud (khachsan)!');
+//     console.log("✅ Kết nối MySQL thành công với cấu trúc CSDL đầy đủ.");
 // });
-
-
-
-const db = mysql.createConnection({
-    host: "localhost",
-    user: "root",
-    password: "",
-    database: "khachsan",
-});
-db.connect((err) => {
-    if (err) {
-        console.error("❌ Lỗi kết nối MySQL:", err);
-        process.exit(1);
-    }
-    console.log("✅ Kết nối MySQL thành công với cấu trúc CSDL đầy đủ.");
-});
 
 //hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh
 
@@ -113,9 +169,6 @@ function verifyAdminToken(req, res, next) {
 
 
 
-/* ==========================================================
-   I. USER AUTH ENDPOINTS (user_cred)
-========================================================== */
 app.post("/api/auth/register", async (req, res) => {
     try {
         // 1. SỬA: Nhận biến 'name' thay vì 'full_name'
@@ -319,7 +372,8 @@ app.get("/api/rooms", (req, res) => {
     });
 });
 
-
+// GET /api/rooms/search
+// Phiên bản "Siêu Cứng": Ép kiểu ngày tháng và in log chi tiết
 app.get("/api/rooms/search", (req, res) => {
     const { checkIn, checkOut } = req.query;
 
@@ -330,7 +384,9 @@ app.get("/api/rooms/search", (req, res) => {
     console.log(`\n🔍 --- DEBUG SEARCH ---`);
     console.log(`📅 Khách tìm: ${checkIn} -> ${checkOut}`);
 
-
+    // LOGIC: Tìm ID các phòng đang bận, sau đó loại trừ ra.
+    // Sử dụng DATE() để cắt bỏ giờ phút giây, chỉ so sánh ngày.
+    
     const sql = `
         SELECT r.*, GROUP_CONCAT(rf.facility_id) AS facility_ids
         FROM rooms r
@@ -738,12 +794,16 @@ app.delete("/api/cart/:id", verifyToken, (req, res) => {
    VNPAY PAYMENT INTEGRATION (ĐÃ SỬA FULL LOGIC)
 ========================================================== */
 
+
 // 1. Cấu hình VNPAY Sandbox
+const frontendUrl = process.env.FRONTEND_URL || "https://frontend-nine-xi-32.vercel.app"; // URL chính thức của Frontend
+
 const vnp_Config = {
-    vnp_TmnCode: "9NUNOHFM", 
-    vnp_HashSecret: "PPO1LAM2IOV36MRA0659GQ996PIJELZG", 
+    vnp_TmnCode: "9NUNOHFM",
+    vnp_HashSecret: "PPO1LAM2IOV36MRA0659GQ996PIJELZG",
     vnp_Url: "https://sandbox.vnpayment.vn/paymentv2/vpcpay.html",
-    vnp_ReturnUrl: "http://localhost:3000/payment-result"
+    // Sử dụng biến frontendUrl để đảm bảo chính xác
+    vnp_ReturnUrl: `${frontendUrl}/payment-result`
 };
 
 function sortObject(obj) {
@@ -764,83 +824,124 @@ function sortObject(obj) {
 
 // 2. API Tạo URL Thanh toán (CÓ LƯU THÔNG TIN TRƯỚC)
 // Thêm verifyToken để lấy được userId
+// ==========================================================
+// API TẠO URL VNPAY (Phiên bản Fix Lỗi 504/500 trên Vercel)
+// ==========================================================
+
+// 1. Cấu hình DB riêng cho API này (Tránh xung đột với kết nối chính)
+const dbConfig = {
+    host: process.env.DB_HOST || 'gateway01.ap-southeast-1.prod.aws.tidbcloud.com',
+    port: process.env.DB_PORT || 4000,
+    user: process.env.DB_USER || '3qhZS3hkjF2gDVy.root',
+    password: process.env.DB_PASS || 'ZVPPWHnjwITbQw1P',
+    database: process.env.DB_NAME || 'khachsan',
+    ssl: { minVersion: 'TLSv1.2', rejectUnauthorized: false }
+};
+
 app.post("/api/create_payment_url", verifyToken, async function (req, res) {
     const userId = req.userId;
-    const { amount, bankCode, language, ...bookingInfo } = req.body; // Lấy thêm thông tin bookingInfo
+    const { amount, bankCode, language, ...bookingInfo } = req.body;
 
-    // A. TÌM ĐƠN HÀNG PENDING CỦA USER
-    const sqlGetOrder = "SELECT id FROM booking_order WHERE user_id = ? AND order_status = 'pending' LIMIT 1";
-    
-    db.query(sqlGetOrder, [userId], (err, rows) => {
-        if (err || rows.length === 0) return res.status(400).json({ message: "Không tìm thấy đơn hàng chờ thanh toán" });
-        
-        const orderId = rows[0].id; // Lấy ID thật trong Database làm mã giao dịch
+    // 🔥 TẠO KẾT NỐI MỚI TINH (Connection)
+    // Mỗi lần bấm thanh toán sẽ tạo 1 kết nối mới, dùng xong bỏ ngay
+    const tempDb = mysql.createConnection(dbConfig);
 
-        // B. LƯU THÔNG TIN KHÁCH HÀNG VÀO BOOKING_DETAILS TRƯỚC (QUAN TRỌNG)
-        // Xóa details cũ nếu có (để tránh trùng lặp khi ấn thanh toán nhiều lần)
-        db.query("DELETE FROM booking_details WHERE booking_id = ?", [orderId], () => {
-            
-            const sqlInsertDetail = `
-                INSERT INTO booking_details 
-                (booking_id, check_in_date, check_out_date, client_name, client_phone, client_address, cccd, payment_method, total_price)
-                VALUES (?, ?, ?, ?, ?, ?, ?, 'vnpay', ?)
-            `;
-            
-            db.query(sqlInsertDetail, [
-                orderId, 
-                bookingInfo.checkIn, 
-                bookingInfo.checkOut, 
-                bookingInfo.name, 
-                bookingInfo.phone, 
-                bookingInfo.address || '', 
-                bookingInfo.cccd, 
-                amount // total price
-            ], (errInsert) => {
-                if (errInsert) {
-                    console.error("Lỗi lưu booking details:", errInsert);
-                    return res.status(500).json({ message: "Lỗi lưu thông tin đặt phòng" });
-                }
-
-                // C. TẠO URL VNPAY SAU KHI ĐÃ LƯU DB THÀNH CÔNG
-                process.env.TZ = 'Asia/Ho_Chi_Minh';
-                let date = new Date();
-                let createDate = moment(date).format('YYYYMMDDHHmmss');
-                let ipAddr = req.headers['x-forwarded-for'] || '127.0.0.1';
-
-                let tmnCode = vnp_Config.vnp_TmnCode;
-                let secretKey = vnp_Config.vnp_HashSecret;
-                let vnpUrl = vnp_Config.vnp_Url;
-                let returnUrl = vnp_Config.vnp_ReturnUrl;
-                
-                let vnp_Params = {};
-                vnp_Params['vnp_Version'] = '2.1.0';
-                vnp_Params['vnp_Command'] = 'pay';
-                vnp_Params['vnp_TmnCode'] = tmnCode;
-                vnp_Params['vnp_Locale'] = language || 'vn';
-                vnp_Params['vnp_CurrCode'] = 'VND';
-                vnp_Params['vnp_TxnRef'] = orderId; // Dùng ID Database
-                vnp_Params['vnp_OrderInfo'] = 'Thanh toan don hang #' + orderId;
-                vnp_Params['vnp_OrderType'] = 'other';
-                vnp_Params['vnp_Amount'] = amount * 100;
-                vnp_Params['vnp_ReturnUrl'] = returnUrl;
-                vnp_Params['vnp_IpAddr'] = ipAddr;
-                vnp_Params['vnp_CreateDate'] = createDate;
-
-                if(bankCode) vnp_Params['vnp_BankCode'] = bankCode;
-
-                vnp_Params = sortObject(vnp_Params);
-                let signData = qs.stringify(vnp_Params, { encode: false });
-                let hmac = crypto.createHmac("sha512", secretKey);
-                let signed = hmac.update(Buffer.from(signData, 'utf-8')).digest("hex"); 
-                vnp_Params['vnp_SecureHash'] = signed;
-                vnpUrl += '?' + qs.stringify(vnp_Params, { encode: false });
-
-                res.json({ paymentUrl: vnpUrl });
+    // Hàm bao bọc query để dùng await (giúp code chạy tuần tự, không bị loạn)
+    const queryAsync = (sql, params) => {
+        return new Promise((resolve, reject) => {
+            tempDb.query(sql, params, (err, result) => {
+                if (err) reject(err);
+                else resolve(result);
             });
         });
-    });
-});
+    };
 
+    try {
+        // Mở kết nối
+        tempDb.connect((err) => {
+            if (err) {
+                console.error("Lỗi kết nối tempDb:", err);
+                throw err;
+            }
+        });
+
+        // A. TÌM ĐƠN HÀNG PENDING
+        const rows = await queryAsync("SELECT id FROM booking_order WHERE user_id = ? AND order_status = 'pending' LIMIT 1", [userId]);
+        
+        if (rows.length === 0) {
+            tempDb.end(); // Đóng kết nối ngay
+            return res.status(400).json({ message: "Không tìm thấy đơn hàng chờ thanh toán" });
+        }
+
+        const orderId = rows[0].id;
+
+        // B. LƯU THÔNG TIN KHÁCH HÀNG
+        // Xóa details cũ để tránh trùng lặp
+        await queryAsync("DELETE FROM booking_details WHERE booking_id = ?", [orderId]);
+
+        // Chèn details mới
+        const sqlInsertDetail = `
+            INSERT INTO booking_details 
+            (booking_id, check_in_date, check_out_date, client_name, client_phone, client_address, cccd, payment_method, total_price)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 'vnpay', ?)
+        `;
+        
+        await queryAsync(sqlInsertDetail, [
+            orderId, 
+            bookingInfo.checkIn, 
+            bookingInfo.checkOut, 
+            bookingInfo.name, 
+            bookingInfo.phone, 
+            bookingInfo.address || '', 
+            bookingInfo.cccd, 
+            amount
+        ]);
+
+        // C. TÍNH TOÁN URL VNPAY (Giữ nguyên logic cũ của bạn)
+        process.env.TZ = 'Asia/Ho_Chi_Minh';
+        let date = new Date();
+        let createDate = moment(date).format('YYYYMMDDHHmmss');
+        let ipAddr = req.headers['x-forwarded-for'] || '127.0.0.1';
+
+        let tmnCode = vnp_Config.vnp_TmnCode;
+        let secretKey = vnp_Config.vnp_HashSecret;
+        let vnpUrl = vnp_Config.vnp_Url;
+        let returnUrl = vnp_Config.vnp_ReturnUrl;
+
+        let vnp_Params = {};
+        vnp_Params['vnp_Version'] = '2.1.0';
+        vnp_Params['vnp_Command'] = 'pay';
+        vnp_Params['vnp_TmnCode'] = tmnCode;
+        vnp_Params['vnp_Locale'] = language || 'vn';
+        vnp_Params['vnp_CurrCode'] = 'VND';
+        vnp_Params['vnp_TxnRef'] = orderId;
+        vnp_Params['vnp_OrderInfo'] = 'Thanh toan don hang #' + orderId;
+        vnp_Params['vnp_OrderType'] = 'other';
+        vnp_Params['vnp_Amount'] = amount * 100;
+        vnp_Params['vnp_ReturnUrl'] = returnUrl;
+        vnp_Params['vnp_IpAddr'] = ipAddr;
+        vnp_Params['vnp_CreateDate'] = createDate;
+
+        if (bankCode) vnp_Params['vnp_BankCode'] = bankCode;
+
+        vnp_Params = sortObject(vnp_Params);
+        let signData = qs.stringify(vnp_Params, { encode: false });
+        let hmac = crypto.createHmac("sha512", secretKey);
+        let signed = hmac.update(Buffer.from(signData, 'utf-8')).digest("hex");
+        vnp_Params['vnp_SecureHash'] = signed;
+        vnpUrl += '?' + qs.stringify(vnp_Params, { encode: false });
+
+        // 🔥 QUAN TRỌNG: Đóng kết nối trước khi trả về để tránh treo Server
+        tempDb.end();
+
+        res.json({ paymentUrl: vnpUrl });
+
+    } catch (error) {
+        console.error("Lỗi tạo URL VNPay:", error);
+        try { tempDb.end(); } catch(e) {} // Cố gắng đóng kết nối nếu có lỗi
+        res.status(500).json({ message: "Lỗi Server khi tạo thanh toán", error: error.message });
+    }
+});
 // 3. API Xác thực và UPDATE DATABASE
 app.get("/api/vnpay_return", function (req, res) {
     let vnp_Params = req.query;
@@ -1128,67 +1229,74 @@ app.get("/api/admin/bookings", verifyAdminToken, (req, res) => {
 });
 
 // 2. PUT /api/admin/bookings/:id/confirm (Xác nhận Check-in/Thanh toán Trả phòng)
-app.put("/api/admin/bookings/:id/confirm", verifyAdminToken, (req, res) => {
+app.put("/api/admin/bookings/:id/confirm", verifyAdminToken, async (req, res) => {
     const bookingId = req.params.id;
-    const action = req.body.action; // Lấy action từ frontend ('check_in' hoặc 'pay')
+    const { action } = req.body;
 
     let newStatus;
     let successMessage;
-    let releaseRoom = false; // Biến cờ để quyết định có trả phòng về available hay không
+    let releaseRoom = false;
 
+    // 1. Phân loại hành động
     if (action === 'check_in') {
-        newStatus = 'checked_in'; 
-        successMessage = "Đã Xác nhận Check-in thành công.";
+        newStatus = 'checked_in';
+        successMessage = "Xác nhận Check-in thành công.";
     } else if (action === 'pay') {
-        newStatus = 'paid'; 
-        successMessage = "Đã Xác nhận Thanh toán Trả phòng thành công.";
-        releaseRoom = true; // Kích hoạt cờ trả phòng
+        newStatus = 'paid';
+        successMessage = "Xác nhận Thanh toán & Trả phòng thành công.";
+        releaseRoom = true;
     } else {
-        return res.status(400).json({ message: "Action không hợp lệ. Chỉ chấp nhận 'check_in' hoặc 'pay'." });
+        return res.status(400).json({ message: "Action không hợp lệ." });
     }
-    
-    db.beginTransaction(err => {
-        if (err) return res.status(500).json({ message: "Lỗi khởi tạo giao dịch" });
-        
-        // 1. Cập nhật trạng thái Đơn hàng
-        const sqlUpdateOrder = "UPDATE booking_order SET order_status = ?, updated_at = NOW() WHERE id = ?";
-        db.query(sqlUpdateOrder, [newStatus, bookingId], (err, result) => {
-            if (err) return db.rollback(() => res.status(500).json({ message: "Lỗi DB khi cập nhật trạng thái đơn hàng", error: err.message }));
-            if (result.affectedRows === 0) return db.rollback(() => res.status(404).json({ message: "Không tìm thấy đơn đặt phòng để cập nhật." }));
 
-            // 2. Nếu là action 'pay' (Trả phòng), cần cập nhật trạng thái phòng
-            if (releaseRoom) {
-                // Lấy room_id từ đơn hàng
-                db.query("SELECT room_id FROM booking_order WHERE id = ?", [bookingId], (errGetRoom, rows) => {
-                    if (errGetRoom || rows.length === 0) {
-                        console.warn("Cảnh báo: Không tìm thấy room_id để giải phóng.");
-                        // Vẫn commit đơn hàng đã trả tiền, nhưng log cảnh báo
-                        return db.commit(() => res.json({ message: successMessage + " (Lỗi: Không giải phóng được phòng)", bookingId, new_status: newStatus }));
-                    }
-
-                    const roomId = rows[0].room_id;
-                    
-                    // Giải phóng phòng: Cập nhật status trong bảng rooms về 'available'
-                    const sqlReleaseRoom = "UPDATE rooms SET status = 'available' WHERE id = ?";
-                    db.query(sqlReleaseRoom, [roomId], (errRelease) => {
-                        if (errRelease) return db.rollback(() => res.status(500).json({ message: "Lỗi DB khi giải phóng phòng", error: errRelease.message }));
-
-                        // 3. Commit Giao dịch thành công
-                        db.commit(errCommit => {
-                            if (errCommit) return db.rollback(() => res.status(500).json({ message: "Lỗi commit sau khi giải phóng phòng", error: errCommit.message }));
-                            res.json({ message: successMessage + " Phòng đã được giải phóng.", bookingId, new_status: newStatus });
-                        });
-                    });
-                });
-            } else {
-                // Nếu là action 'check_in', chỉ commit cập nhật trạng thái đơn hàng (không giải phóng phòng)
-                db.commit(errCommit => {
-                    if (errCommit) return db.rollback(() => res.status(500).json({ message: "Lỗi commit sau check-in", error: errCommit.message }));
-                    res.json({ message: successMessage, bookingId, new_status: newStatus });
-                });
-            }
-        });
+    // Hàm tiện ích để thực hiện query dạng Promise
+    const query = (sql, params) => new Promise((resolve, reject) => {
+        db.query(sql, params, (err, results) => (err ? reject(err) : resolve(results)));
     });
+
+    try {
+        // 2. Bắt đầu Giao dịch (Transaction)
+        await query("START TRANSACTION");
+
+        // 3. Cập nhật trạng thái đơn hàng
+        const updateResult = await query(
+            "UPDATE booking_order SET order_status = ?, updated_at = NOW() WHERE id = ?",
+            [newStatus, bookingId]
+        );
+
+        if (updateResult.affectedRows === 0) {
+            await query("ROLLBACK");
+            return res.status(404).json({ message: "Không tìm thấy đơn hàng để cập nhật." });
+        }
+
+        // 4. Nếu là Thanh toán (pay), thực hiện giải phóng phòng
+        if (releaseRoom) {
+            const rows = await query("SELECT room_id FROM booking_order WHERE id = ?", [bookingId]);
+            
+            if (rows.length > 0) {
+                const roomId = rows[0].room_id;
+                // Cập nhật trạng thái phòng về 'available'
+                await query("UPDATE rooms SET status = 'available' WHERE id = ?", [roomId]);
+            }
+        }
+
+        // 5. Hoàn tất Giao dịch
+        await query("COMMIT");
+        res.json({ 
+            message: releaseRoom ? successMessage + " Phòng đã được giải phóng." : successMessage, 
+            bookingId, 
+            new_status: newStatus 
+        });
+
+    } catch (error) {
+        // 6. Rollback nếu có bất kỳ lỗi nào xảy ra trong quá trình
+        await query("ROLLBACK");
+        console.error("Lỗi xác nhận đặt phòng:", error);
+        res.status(500).json({ 
+            message: "Lỗi hệ thống khi xử lý giao dịch.", 
+            error: error.message 
+        });
+    }
 });
 
 // 3. DELETE /api/admin/bookings/:id/cancel (Hủy đơn đặt phòng)
@@ -1373,7 +1481,6 @@ app.get("/api/admin/bookings/pending", verifyAdminToken, (req, res) => {
     });
 });
 app.get("/api/admin/bookings/history", verifyAdminToken, (req, res) => {
-
     const sql = `
         SELECT 
             b.id AS booking_id,
@@ -1392,8 +1499,8 @@ app.get("/api/admin/bookings/history", verifyAdminToken, (req, res) => {
         FROM booking_order b
         JOIN rooms r ON b.room_id = r.id
         LEFT JOIN booking_details d ON b.id = d.booking_id
-        -- 🚨 ĐIỀU CHỈNH: Bao gồm các đơn bị hủy ('cancelled') VÀ các đơn có trạng thái trống/NULL
-        WHERE b.order_status = 'cancelled' OR b.order_status IS NULL OR b.order_status = ''
+        -- 🚨 ĐIỀU CHỈNH QUAN TRỌNG: Thêm 'paid' để thấy được các đơn vừa xác nhận trả phòng
+        WHERE b.order_status IN ('cancelled', 'paid', '') OR b.order_status IS NULL
         ORDER BY b.updated_at DESC
     `;
 
@@ -1406,21 +1513,21 @@ app.get("/api/admin/bookings/history", verifyAdminToken, (req, res) => {
         const formattedRows = rows.map(row => {
             let duration = 'N/A';
 
-            // Logic tính thời gian thuê chỉ áp dụng nếu có ngày tháng hợp lệ
-            if (
-                row.check_in_date &&
-                row.check_out_date &&
-                (row.order_status === 'paid' || row.order_status === 'checked_in') // Vẫn giữ logic cũ để tính duration nếu status có giá trị
-            ) {
+            // 1. Tính số ngày ở cho các đơn đã thanh toán thành công
+            if (row.check_in_date && row.check_out_date && row.order_status === 'paid') {
                 const checkIn = new Date(row.check_in_date);
                 const checkOut = new Date(row.check_out_date);
-                const diff = Math.ceil((checkOut - checkIn) / (1000 * 60 * 60 * 24));
-
-                duration = `${diff} ngày`;
-            } else if (row.order_status === 'cancelled') {
+                const diffTime = Math.abs(checkOut - checkIn);
+                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                duration = `${diffDays} ngày (Đã xong)`;
+            } 
+            // 2. Trạng thái hủy
+            else if (row.order_status === 'cancelled') {
                 duration = 'Đã hủy';
-            } else if (!row.order_status) {
-                duration = 'Trạng thái không xác định';
+            } 
+            // 3. Xử lý các đơn có trạng thái trống (từ dữ liệu lỗi cũ)
+            else if (!row.order_status || row.order_status === '') {
+                duration = 'Chưa xác định';
             }
 
             return {
@@ -1862,10 +1969,10 @@ app.get("/api/rooms/search/advanced", (req, res) => {
     const { checkIn, checkOut, maxPrice, guests } = req.query;
     const queryParams = [];
 
-
+    // Lấy các phòng đang hoạt động
     let sql = `SELECT r.* FROM rooms r WHERE r.status IN ('active', 'available', 'booked') `;
 
- 
+    // Lọc ngày trống: Phòng KHÔNG được có đơn đặt nào trùng vào khoảng ngày này
     if (checkIn && checkOut) {
         sql += `
             AND NOT EXISTS (
@@ -1893,11 +2000,9 @@ app.get("/api/rooms/search/advanced", (req, res) => {
 
     db.query(sql, queryParams, (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
-        res.json(rows); 
+        res.json(rows); // Trả về mảng trực tiếp cho Frontend dễ map
     });
 });
-
-
 
 app.post("/api/chatbot", async (req, res) => {
     try {
@@ -1914,7 +2019,7 @@ app.post("/api/chatbot", async (req, res) => {
             let guests = 1; 
             let nameKeyword = "";
 
-            // --- 1. XỬ LÝ GIÁ (Hardcode như bạn muốn) ---
+            // --- 1. XỬ LÝ GIÁ ---
             if (lowerMessage.includes("dưới 500") || lowerMessage.includes("500k")) maxPrice = 500000;
             else if (lowerMessage.includes("dưới 1 triệu") || lowerMessage.includes("1tr")) maxPrice = 1000000;
             else if (lowerMessage.includes("dưới 2 triệu") || lowerMessage.includes("2tr")) maxPrice = 2000000;
@@ -1924,12 +2029,10 @@ app.post("/api/chatbot", async (req, res) => {
             const guestMatch = lowerMessage.match(/(\d+)\s*(khách|người|ng)/) || lowerMessage.match(/cho\s*(\d+)/);
             if (guestMatch) guests = parseInt(guestMatch[1]);
 
-            // --- 3. XỬ LÝ TÊN PHÒNG (REGEX ƯU TIÊN) ---
-            // Bắt cụm từ sau chữ "phòng"
+            // --- 3. XỬ LÝ TÊN PHÒNG ---
             const detailedMatch = lowerMessage.match(/phòng\s+([a-zA-Z0-9à-ỹ\s]+)/);
             if (detailedMatch) {
                 let potentialName = detailedMatch[1].trim();
-                // Từ khóa dừng để cắt chuỗi rác
                 const stopWords = ["giá", "dưới", "trên", "tầm", "khoảng", "cho", "có", "tại", "ở", "là"];
                 let words = potentialName.split(" ");
                 let cleanWords = [];
@@ -1940,7 +2043,6 @@ app.post("/api/chatbot", async (req, res) => {
                 nameKeyword = cleanWords.join(" ").trim();
             }
 
-            // Nếu Regex không bắt được gì (ví dụ khách chỉ chat "tìm phòng vip"), dùng Hardcode fallback
             if (!nameKeyword) {
                 if (lowerMessage.includes("vip")) nameKeyword = "VIP";
                 else if (lowerMessage.includes("deluxe")) nameKeyword = "Deluxe";
@@ -1950,8 +2052,7 @@ app.post("/api/chatbot", async (req, res) => {
                 else if (lowerMessage.includes("single")) nameKeyword = "Single";
             }
 
-            // --- 4. TẠO SQL QUERY (LẤY RỘNG - SEARCH BROAD) ---
-            // Chiến thuật: Cứ lấy hết danh sách ra trước, rồi lọc sau
+            // --- 4. TẠO SQL QUERY ---
             let sql = `SELECT id, name, price_per_night, max_guests, description 
                        FROM rooms 
                        WHERE status IN ('available', 'active')`;
@@ -1963,15 +2064,14 @@ app.post("/api/chatbot", async (req, res) => {
             if (nameKeyword) {
                 sql += " AND name LIKE ?";
                 params.push(`%${nameKeyword}%`);
-                // Vẫn sắp xếp để ưu tiên tên giống nhất lên đầu
                 sql += ` ORDER BY CASE WHEN name = ? THEN 1 ELSE 2 END, price_per_night ASC`;
                 params.push(nameKeyword);
             } else {
                 sql += " ORDER BY price_per_night ASC";
             }
             
-            // Lấy nhiều kết quả một chút để lọc
-            sql += " LIMIT 10"; 
+            // Tăng LIMIT hoặc bỏ LIMIT để lấy toàn bộ danh sách phù hợp
+            sql += " LIMIT 50"; 
 
             // --- 5. GỌI DATABASE ---
             try {
@@ -1987,74 +2087,62 @@ app.post("/api/chatbot", async (req, res) => {
                 const rows = await executeQuery(sql, params);
 
                 if (!rows || rows.length === 0) {
-                     return res.json({ reply: `Không tìm thấy phòng nào phù hợp.` });
+                     return res.json({ reply: `Không tìm thấy phòng nào phù hợp với yêu cầu của bạn.` });
                 }
 
-                // ==========================================================
-                // --- 6. LOGIC "THÔNG MINH": LỌC KẾT QUẢ (THE MAGIC) ---
-                // ==========================================================
-                
+                // --- 6. LOGIC LỌC KẾT QUẢ ---
                 let finalRooms = rows;
                 let isExactFound = false;
 
                 if (nameKeyword) {
-                    // Kiểm tra xem có phòng nào trùng tên KHỚP 100% không?
-                    // (So sánh không phân biệt hoa thường)
                     const exactMatchRoom = rows.find(r => r.name.toLowerCase() === nameKeyword.toLowerCase());
-
                     if (exactMatchRoom) {
-                        // NẾU CÓ: Chỉ lấy đúng 1 phòng này, vứt hết các phòng khác (VIP 2, VIP 3...)
                         finalRooms = [exactMatchRoom];
                         isExactFound = true;
                     } 
-                   
+                    // ĐÃ XÓA: Phần slice(0, 3) để không bị giới hạn số lượng hiện ra
                 }
 
-          
-                if (!isExactFound && finalRooms.length > 3) {
-                    finalRooms = finalRooms.slice(0, 3);
-                }
-
-         
+                // --- 7. TRẢ VỀ JSON ---
                 let reply = "";
                 
                 if (isExactFound) {
-                   
                     const room = finalRooms[0];
                     reply += `🎯 **Tìm thấy chính xác phòng ${room.name}!**\n`;
                     reply += `💰 Giá: ${parseFloat(room.price_per_night).toLocaleString()} đ/đêm\n`;
                     reply += `👥 Tối đa: ${room.max_guests} người\n`;
                     reply += `👉 [XEM CHI TIẾT & ĐẶT NGAY](/rooms/${room.id})`; 
                 } else {
-             
-                    reply += `✅ Tìm thấy ${rows.length} phòng có từ khoá "${nameKeyword || 'này'}":\n\n`;
+                    reply += `✅ Tìm thấy ${rows.length} phòng phù hợp:\n\n`;
+                    
+                    // Lặp qua tất cả phòng trong finalRooms
                     finalRooms.forEach(room => {
                         reply += `🏨 **${room.name}**\n💰 ${parseFloat(room.price_per_night).toLocaleString()} đ/đêm\n🔗 [Xem chi tiết](/rooms/${room.id})\n\n`;
                     });
-                    if (rows.length > 3) reply += `...và các phòng khác.`;
+                    
+                    // ĐÃ XÓA: Dòng chữ "...và các phòng khác"
                 }
 
                 return res.json({ reply });
 
             } catch (err) {
                 console.error(err);
-                return res.json({ reply: "Lỗi kết nối." });
+                return res.json({ reply: "Lỗi kết nối cơ sở dữ liệu." });
             }
 
         } else {
-  
+            // Logic Gemini cho các câu hỏi thông thường
             try {
-                const prompt = `Bạn là lễ tân. Trả lời ngắn gọn: "${userMessage}"`;
+                const prompt = `Bạn là lễ tân khách sạn thân thiện. Trả lời ngắn gọn câu hỏi sau: "${userMessage}"`;
                 const result = await model.generateContent(prompt);
                 const response = await result.response;
                 return res.json({ reply: response.text() });
-            } catch (e) { return res.json({ reply: "Xin lỗi, tôi đang bận." }); }
+            } catch (e) { return res.json({ reply: "Xin lỗi, tôi gặp chút trục trặc. Bạn cần hỏi gì về phòng ốc không?" }); }
         }
     } catch (e) {
-        res.status(500).json({ reply: "Lỗi Server." });
+        res.status(500).json({ reply: "Lỗi hệ thống Server." });
     }
-});ty
-
+});
 /* ==========================
    START SERVER
 ========================== */
